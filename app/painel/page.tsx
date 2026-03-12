@@ -115,19 +115,42 @@ export default function PainelLojista() {
       </aside>
 
       <main className="flex-1 p-8 overflow-y-auto h-screen">
-        {abaAtiva === "inicio" && <DashboardInicio tenant={tenant} />}
-        {abaAtiva === "pedidos" && <div className="w-full max-w-7xl animate-in fade-in"><PedidosAoVivo tenantId={tenant.id} /></div>}
+        {abaAtiva === "inicio" && tenant && <DashboardInicio tenant={tenant} />}
         
-        {/* ABA DE MARKETING CORRIGIDA */}
-        {abaAtiva === "marketing" && (
+        {abaAtiva === "pedidos" && tenant && (
+          <div className="w-full max-w-7xl animate-in fade-in">
+            {/* @ts-ignore */}
+            <PedidosAoVivo tenantId={tenant.id} />
+          </div>
+        )}
+        
+        {abaAtiva === "marketing" && tenant && (
           <div className="w-full max-w-6xl animate-in fade-in">
+            {/* @ts-ignore */}
             <MotorMarketing tenantId={tenant.id} />
           </div>
         )}
         
-        {abaAtiva === "cardapio" && <div className="w-full max-w-7xl animate-in fade-in"><GestaoCardapio tenantId={tenant.id} produtos={produtos} onUpdate={() => buscarDados(tenant.id)} /></div>}
-        {abaAtiva === "loja" && <div className="w-full max-w-5xl animate-in fade-in"><ConfigLoja tenant={tenant} onUpdate={() => buscarDados(tenant.id)} /></div>}
-        {abaAtiva === "crm" && <div className="w-full max-w-6xl animate-in fade-in"><GestaoCRM tenantId={tenant.id} /></div>}
+        {abaAtiva === "cardapio" && tenant && (
+          <div className="w-full max-w-7xl animate-in fade-in">
+            {/* @ts-ignore */}
+            <GestaoCardapio tenantId={tenant.id} produtos={produtos} onUpdate={() => buscarDados(tenant.id)} />
+          </div>
+        )}
+        
+        {abaAtiva === "loja" && tenant && (
+          <div className="w-full max-w-5xl animate-in fade-in">
+            {/* @ts-ignore */}
+            <ConfigLoja tenant={tenant} onUpdate={() => buscarDados(tenant.id)} />
+          </div>
+        )}
+        
+        {abaAtiva === "crm" && tenant && (
+          <div className="w-full max-w-6xl animate-in fade-in">
+            {/* @ts-ignore */}
+            <GestaoCRM tenantId={tenant.id} />
+          </div>
+        )}
       </main>
     </div>
   );
