@@ -1,8 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Puxando as chaves que guardamos no arquivo .env.local
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://link-falso-para-vercel.supabase.co'
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'chave_falsa_para_vercel'
 
-// Criando e exportando a conexão pronta para ser usada no resto do site
 export const supabase = createClient(supabaseUrl, supabaseKey)
