@@ -131,65 +131,132 @@ export default function PainelLojista() {
     setSenha("");
   };
 
-  // TELA DE LOGIN / CADASTRO
+  // TELA DE LOGIN / CADASTRO PREMIUM
   if (!tenant) {
     return (
-      <div className="min-h-screen bg-zinc-900 flex items-center justify-center p-4">
-        <div className="bg-zinc-800 p-8 rounded-xl max-w-md w-full border border-zinc-700 shadow-2xl">
+      <div className="min-h-screen bg-zinc-950 flex flex-col md:flex-row relative overflow-hidden font-sans">
+        
+        {/* Fundo Animado Sutil (Mesh Gradient) */}
+        <div className="absolute inset-0 opacity-20 pointer-events-none">
+          <div className="absolute -inset-x-20 -top-40 h-[600px] bg-gradient-to-r from-blue-600 to-indigo-700 blur-[120px] rounded-full animate-pulse"></div>
+          <div className="absolute -inset-x-20 -bottom-40 h-[600px] bg-gradient-to-r from-purple-700 to-pink-600 blur-[120px] rounded-full animate-pulseDelay"></div>
+        </div>
+
+        {/* Lado Esquerdo: Formulário (Foco na Ação) */}
+        <div className="flex-1 flex items-center justify-center p-6 md:p-12 z-10 animate-in fade-in slide-in-from-left duration-700">
+          <div className="bg-zinc-900/80 backdrop-blur-xl p-10 rounded-3xl max-w-lg w-full border border-zinc-800 shadow-[0_0_60px_-15px_rgba(0,0,0,0.7)] flex flex-col">
+            
+            {/* Logo / Título SaaS */}
+            <div className="flex items-center gap-3 mb-10">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-blue-500/20">
+                D
+              </div>
+              <h1 className="text-3xl font-black text-white tracking-tighter">Delivery <span className="text-blue-500">IA</span></h1>
+            </div>
+
+            {/* Abas de Navegação Premium */}
+            <div className="flex gap-1 mb-10 bg-zinc-950 p-1.5 rounded-full border border-zinc-800">
+              <button 
+                onClick={() => setModoAuth("login")}
+                className={`flex-1 font-bold text-center py-3 rounded-full text-sm transition-all duration-300 ${modoAuth === "login" ? "bg-zinc-800 text-white shadow" : "text-zinc-500 hover:text-zinc-300"}`}
+              >
+                Entrar
+              </button>
+              <button 
+                onClick={() => setModoAuth("cadastro")}
+                className={`flex-1 font-bold text-center py-3 rounded-full text-sm transition-all duration-300 ${modoAuth === "cadastro" ? "bg-zinc-800 text-white shadow" : "text-zinc-500 hover:text-zinc-300"}`}
+              >
+                Criar Conta
+              </button>
+            </div>
+
+            {/* Formulário Dinâmico */}
+            {modoAuth === "login" ? (
+              <form onSubmit={fazerLogin} className="flex flex-col gap-5 animate-in fade-in">
+                <div className="mb-4">
+                  <h2 className="text-3xl font-black text-white leading-tight tracking-tighter">Aceder ao seu Painel de Controle</h2>
+                  <p className="text-zinc-400 mt-2">Bem-vindo de volta! Digite suas credenciais para gerir suas vendas.</p>
+                </div>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Seu e-mail profissional" className="w-full px-5 py-4 bg-zinc-950/70 border border-zinc-800 rounded-2xl text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder:text-zinc-600" required />
+                <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Sua senha secreta" className="w-full px-5 py-4 bg-zinc-950/70 border border-zinc-800 rounded-2xl text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder:text-zinc-600" required />
+                <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-extrabold py-4 mt-6 rounded-2xl hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg shadow-blue-500/20 active:scale-[0.98]">
+                  {loading ? "Verificando Credenciais..." : "Aceder Máquina de Vendas"}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={fazerCadastro} className="flex flex-col gap-5 animate-in fade-in">
+                <div className="mb-4">
+                  <h2 className="text-3xl font-black text-white leading-tight tracking-tighter">Começar a Vender Mais Hoje</h2>
+                  <p className="text-zinc-400 mt-2">Configure sua loja digital e deixe nossa IA impulsionar seus resultados.</p>
+                </div>
+                
+                <input type="text" value={nomeRestaurante} onChange={(e) => setNomeRestaurante(e.target.value)} placeholder="Nome do Restaurante (ex: Esquinas Bar)" className="w-full px-5 py-4 bg-zinc-950/70 border border-zinc-800 rounded-2xl text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder:text-zinc-600" required />
+                
+                {/* O Subdomínio Gerado (Apenas Leitura - Estilo Link) */}
+                {slugGerado && (
+                   <div className="flex items-center bg-zinc-950/40 border border-zinc-800 border-dashed rounded-2xl px-5 py-4 opacity-80 text-sm">
+                     <span className="text-zinc-600">seuapp.com/</span>
+                     <span className="text-blue-400 font-bold ml-1 tracking-tight">{slugGerado}</span>
+                     <span className="text-zinc-700 ml-auto">exclusivo</span>
+                   </div>
+                )}
+
+                <input type="text" value={nomeResponsavel} onChange={(e) => setNomeResponsavel(e.target.value)} placeholder="Nome do Responsável" className="w-full px-5 py-4 bg-zinc-950/70 border border-zinc-800 rounded-2xl text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder:text-zinc-600" required />
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-mail profissional de acesso" className="w-full px-5 py-4 bg-zinc-950/70 border border-zinc-800 rounded-2xl text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder:text-zinc-600" required />
+                
+                <div className="flex gap-3">
+                  <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Criar Senha" className="w-full px-5 py-4 bg-zinc-950/70 border border-zinc-800 rounded-2xl text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder:text-zinc-600" required />
+                  <input type="password" value={confirmarSenha} onChange={(e) => setConfirmarSenha(e.target.value)} placeholder="Confirmar" className="w-full px-5 py-4 bg-zinc-950/70 border border-zinc-800 rounded-2xl text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all placeholder:text-zinc-600" required />
+                </div>
+
+                <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-extrabold py-4 mt-6 rounded-2xl hover:from-blue-700 hover:to-blue-800 transition-all shadow-lg shadow-blue-500/20 active:scale-[0.98]">
+                  {loading ? "Criando seu Delivery..." : "Lançar Minha Máquina de Vendas"}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+
+        {/* Lado Direito: Proposta de Valor (Foco no Benefício e Impacto Visual) */}
+        <div className="flex-1 bg-zinc-900 md:flex flex-col items-center justify-center p-10 md:p-20 relative z-0 border-l border-zinc-800 animate-in fade-in slide-in-from-right duration-700">
           
-          {/* Abas de Navegação */}
-          <div className="flex gap-4 mb-8 border-b border-zinc-700 pb-4">
-            <button 
-              onClick={() => setModoAuth("login")}
-              className={`flex-1 font-bold text-center pb-2 transition-colors ${modoAuth === "login" ? "text-blue-500 border-b-2 border-blue-500" : "text-zinc-500 hover:text-zinc-300"}`}
-            >
-              Entrar
-            </button>
-            <button 
-              onClick={() => setModoAuth("cadastro")}
-              className={`flex-1 font-bold text-center pb-2 transition-colors ${modoAuth === "cadastro" ? "text-blue-500 border-b-2 border-blue-500" : "text-zinc-500 hover:text-zinc-300"}`}
-            >
-              Criar Conta
-            </button>
+          <div className="max-w-2xl text-center md:text-left">
+            {/* Frase de Impacto Premium */}
+            <h1 className="text-5xl md:text-6xl font-black text-white leading-[0.95] tracking-tighter mb-6">
+              Abra sua <br />
+              Máquina de Vendas <span className="text-transparent bg-clip-text bg-gradient-to-br from-blue-400 to-blue-600">Digital</span>.
+            </h1>
+            
+            <p className="text-xl text-zinc-400 mb-16 max-w-xl">
+              Nossa IA gerencia seu marketing, atrai clientes e otimiza sua operação, enquanto você foca no que importa: <span className="font-bold text-zinc-100">preparar o melhor produto</span>.
+            </p>
+
+            {/* Cards de Benefícios / Prova de Valor */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl">
+              
+              {[
+                { icon: "✨", title: "Marketing com IA", desc: "Campanhas automáticas no Insta e Google Ads que trazem clientes de verdade.", shadow: "shadow-blue-500/10" },
+                { icon: "🧾", title: "Gestão Sem Taxas", desc: "Cardápio digital próprio. Venda sem pagar porcentagem para apps terceiros.", shadow: "shadow-purple-500/10" },
+                { icon: "👥", title: "CRM & Retenção", desc: "Conheça seu cliente e venda mais de uma vez para a mesma pessoa.", shadow: "shadow-pink-500/10" },
+                { icon: "🚀", title: "Pedidos Ao Vivo", desc: "Painel agilizado para cozinha e entregadores. Zero confusão.", shadow: "shadow-emerald-500/10" }
+              ].map((item, idx) => (
+                <div key={idx} className={`bg-zinc-800/60 p-6 rounded-2xl border border-zinc-700 flex items-start gap-4 shadow-lg ${item.shadow} hover:border-zinc-600 hover:scale-[1.02] transition-all`}>
+                  <div className="text-3xl mt-1">{item.icon}</div>
+                  <div>
+                    <h4 className="font-extrabold text-white text-lg tracking-tight">{item.title}</h4>
+                    <p className="text-sm text-zinc-400 mt-1 leading-relaxed">{item.desc}</p>
+                  </div>
+                </div>
+              ))}
+
+            </div>
+
           </div>
 
-          {modoAuth === "login" ? (
-            <form onSubmit={fazerLogin} className="flex flex-col gap-4 animate-in fade-in">
-              <h1 className="text-2xl font-bold text-white mb-2">Bem-vindo de volta!</h1>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Seu e-mail" className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:ring-2 focus:ring-blue-500 outline-none" required />
-              <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Sua senha" className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:ring-2 focus:ring-blue-500 outline-none" required />
-              <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white font-bold py-3 mt-4 rounded-lg hover:bg-blue-700 transition-colors">
-                {loading ? "A acessar..." : "Entrar no Painel"}
-              </button>
-            </form>
-          ) : (
-            <form onSubmit={fazerCadastro} className="flex flex-col gap-4 animate-in fade-in">
-              <h1 className="text-2xl font-bold text-white mb-2">Configure o seu Delivery</h1>
-              
-              <input type="text" value={nomeRestaurante} onChange={(e) => setNomeRestaurante(e.target.value)} placeholder="Nome do Restaurante (ex: Esquinas Bar)" className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:ring-2 focus:ring-blue-500 outline-none" required />
-              
-              {/* O Subdomínio Gerado (Apenas Leitura) */}
-              {slugGerado && (
-                 <div className="flex items-center bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 opacity-70">
-                   <span className="text-zinc-500">app.seusite.com/</span>
-                   <span className="text-blue-400 font-bold ml-1">{slugGerado}</span>
-                 </div>
-              )}
-
-              <input type="text" value={nomeResponsavel} onChange={(e) => setNomeResponsavel(e.target.value)} placeholder="Nome do Responsável" className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:ring-2 focus:ring-blue-500 outline-none" required />
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-mail de acesso" className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:ring-2 focus:ring-blue-500 outline-none" required />
-              
-              <div className="flex gap-2">
-                <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Senha" className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:ring-2 focus:ring-blue-500 outline-none" required />
-                <input type="password" value={confirmarSenha} onChange={(e) => setConfirmarSenha(e.target.value)} placeholder="Confirme" className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:ring-2 focus:ring-blue-500 outline-none" required />
-              </div>
-
-              <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white font-bold py-3 mt-4 rounded-lg hover:bg-blue-700 transition-colors">
-                {loading ? "A criar..." : "Criar Meu Negócio"}
-              </button>
-            </form>
-          )}
+          {/* Toque Visual de IA (Círculo de Foco) */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full bg-blue-500/5 blur-[150px] pointer-events-none"></div>
         </div>
+
       </div>
     );
   }
