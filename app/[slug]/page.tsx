@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
 import { useParams } from "next/navigation";
+import ModalProduto from "../../components/ModalProduto";
+import CarrinhoFlutuante from "../../components/CarrinhoFlutuante";
 
 export default function VitrineLoja() {
   const params = useParams();
@@ -12,6 +14,9 @@ export default function VitrineLoja() {
   const [produtos, setProdutos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
+  
+  // Estado para controlar o modal de compra
+  const [produtoSelecionado, setProdutoSelecionado] = useState<any>(null);
 
   useEffect(() => {
     if (slug) {
@@ -21,7 +26,6 @@ export default function VitrineLoja() {
 
   const carregarLoja = async () => {
     setLoading(true);
-    // Busca os dados do Restaurante
     const { data: tenantData } = await supabase
       .from("tenants")
       .select("*")
@@ -30,7 +34,6 @@ export default function VitrineLoja() {
 
     if (tenantData) {
       setTenant(tenantData);
-      // Busca os produtos e já ordena pelos mais vendidos (inteligência do sistema)
       const { data: produtosData } = await supabase
         .from("products")
         .select("*")
@@ -51,35 +54,29 @@ export default function VitrineLoja() {
   }
 
   // --- INTELIGÊNCIA DA VITRINE ---
-
-  // 1. Filtro de Busca
   const produtosFiltrados = produtos.filter((p) => 
     p.name.toLowerCase().includes(busca.toLowerCase()) || 
     (p.description && p.description.toLowerCase().includes(busca.toLowerCase()))
   );
 
-  // 2. Lógica de Destaques (Se o lojista não escolher, pegamos os Top Vendas)
   let destaques = produtosFiltrados.filter(p => p.destaque);
   if (destaques.length === 0) {
-    destaques = produtosFiltrados.slice(0, 4); // Pega os 4 mais vendidos
+    destaques = produtosFiltrados.slice(0, 4);
   }
 
-  // 3. Agrupamento por Categorias (Dinâmico)
   const categoriasUnicas = Array.from(new Set(produtosFiltrados.map(p => p.categoria || "Gerais")));
 
   return (
     <div className="min-h-screen bg-zinc-50 font-sans pb-20">
       
-      {/* HEADER: Capa e Logo (Estilo iFood) */}
+      {/* HEADER: Capa e Logo */}
       <div className="w-full h-40 md:h-64 bg-zinc-200 relative">
-        {/* Aqui no futuro pode entrar a imagem de capa do restaurante */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
       </div>
       
       <div className="max-w-5xl mx-auto px-4 sm:px-6 relative -mt-12 md:-mt-16">
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-zinc-100 flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
           <div className="w-24 h-24 md:w-32 md:h-32 bg-zinc-100 rounded-full border-4 border-white shadow-md flex items-center justify-center text-3xl shrink-0 overflow-hidden">
-            {/* Foto de perfil ou Letra inicial */}
             <span className="font-black text-zinc-400">{tenant.name.charAt(0)}</span>
           </div>
           <div className="text-center sm:text-left pt-2 md:pt-6 flex-1">
@@ -109,15 +106,23 @@ export default function VitrineLoja() {
           />
         </div>
 
-        {/* SESSÃO DE DESTAQUES (Carrossel Horizontal) */}
+        {/* SESSÃO DE DESTAQUES */}
         {destaques.length > 0 && busca === "" && (
           <div className="mb-12">
             <h2 className="text-xl font-bold text-zinc-900 mb-4 tracking-tight">Destaques</h2>
             <div className="flex overflow-x-auto gap-4 pb-4 snap-x hide-scrollbar">
               {destaques.map((produto) => (
-                <div key={produto.id} className="min-w-[260px] max-w-[260px] sm:min-w-[280px] bg-white border border-zinc-200 rounded-xl p-4 cursor-pointer hover:shadow-md transition-shadow snap-start flex flex-col">
+                <div 
+                  key={produto.id} 
+                  onClick={() => setProdutoSelecionado(produto)}
+                  className="min-w-[260px] max-w-[260px] sm:min-w-[280px] bg-white border border-zinc-200 rounded-xl p-4 cursor-pointer hover:shadow-md transition-shadow snap-start flex flex-col"
+                >
                   <div className="w-full h-36 bg-zinc-100 rounded-lg mb-4 flex items-center justify-center overflow-hidden shrink-0">
-                    <span className="text-4xl opacity-50">🍔</span>
+                    {produto.image_url ? (
+                      <img src={produto.image_url} alt={produto.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-4xl opacity-50">🍔</span>
+                    )}
                   </div>
                   <h3 className="font-semibold text-zinc-800 leading-tight mb-1">{produto.name}</h3>
                   <p className="text-xs text-zinc-500 line-clamp-2 mb-3 flex-1">{produto.description}</p>
@@ -128,7 +133,7 @@ export default function VitrineLoja() {
           </div>
         )}
 
-        {/* LISTAGEM POR CATEGORIAS (Grade 2 Colunas) */}
+        {/* LISTAGEM POR CATEGORIAS */}
         <div className="flex flex-col gap-10">
           {categoriasUnicas.map((categoria) => {
             const produtosDaCategoria = produtosFiltrados.filter(p => (p.categoria || "Gerais") === categoria);
@@ -138,17 +143,24 @@ export default function VitrineLoja() {
             return (
               <div key={categoria}>
                 <h2 className="text-xl font-bold text-zinc-900 mb-4 tracking-tight">{categoria}</h2>
-                {/* Grade dividida: 1 coluna no celular, 2 no PC */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {produtosDaCategoria.map((produto) => (
-                    <div key={produto.id} className="bg-white border border-zinc-200 rounded-xl p-4 cursor-pointer hover:shadow-md hover:border-zinc-300 transition-all flex justify-between gap-4">
+                    <div 
+                      key={produto.id} 
+                      onClick={() => setProdutoSelecionado(produto)}
+                      className="bg-white border border-zinc-200 rounded-xl p-4 cursor-pointer hover:shadow-md hover:border-zinc-300 transition-all flex justify-between gap-4"
+                    >
                       <div className="flex flex-col flex-1">
                         <h3 className="font-semibold text-zinc-800 mb-1">{produto.name}</h3>
                         <p className="text-sm text-zinc-500 line-clamp-2 mb-3 leading-relaxed">{produto.description}</p>
                         <span className="font-medium text-emerald-600 mt-auto">R$ {Number(produto.price).toFixed(2).replace('.', ',')}</span>
                       </div>
                       <div className="w-28 h-28 bg-zinc-100 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
-                         <span className="text-3xl opacity-50">🍔</span>
+                        {produto.image_url ? (
+                          <img src={produto.image_url} alt={produto.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-3xl opacity-50">🍔</span>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -165,8 +177,18 @@ export default function VitrineLoja() {
         </div>
 
       </div>
+
+      {/* COMPONENTES DE COMPRA E CARRINHO */}
+      {produtoSelecionado && (
+        <ModalProduto
+          produto={produtoSelecionado}
+          tenantId={tenant.id}
+          onClose={() => setProdutoSelecionado(null)}
+        />
+      )}
+
+      {tenant && <CarrinhoFlutuante />}
       
-      {/* Estilo extra para esconder a barra de rolagem no carrossel sem perder a função */}
       <style dangerouslySetInnerHTML={{__html: `
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
