@@ -174,7 +174,9 @@ export default function VitrineLoja() {
           </div>
         </div>
 
-        {/* MODAIS: A ordem correta sem travar a tela */}
+        {/* MODAIS: A ordem correta e conectada */}
+        
+        {/* 1. Modal do Produto */}
         {produtoSelecionado && (
           <ModalProduto
             produto={produtoSelecionado}
@@ -183,12 +185,10 @@ export default function VitrineLoja() {
           />
         )}
 
-        {/* O flutuante abre a lateral */}
-        <div onClick={() => setIsCartOpen(true)}>
-          <CarrinhoFlutuante tenant={tenant} />
-        </div>
+        {/* 2. O Flutuante manda a ordem para abrir a sacola lateral */}
+        <CarrinhoFlutuante onClick={() => setIsCartOpen(true)} />
 
-        {/* A lateral fecha ela mesma e abre o checkout */}
+        {/* 3. A Sacola Lateral fecha a si mesma e manda a ordem para abrir o checkout */}
         {isCartOpen && (
           <CarrinhoLateral 
             tenant={tenant} 
@@ -200,10 +200,9 @@ export default function VitrineLoja() {
           />
         )}
 
+        {/* 4. O Checkout finaliza a compra */}
         {isCheckoutOpen && (
           <CheckoutModal 
-            tenant={tenant} 
-            isOpen={isCheckoutOpen}
             onClose={() => setIsCheckoutOpen(false)} 
           />
         )}
