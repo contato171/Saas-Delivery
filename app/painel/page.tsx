@@ -10,18 +10,37 @@ import ConfigLoja from "../../components/ConfigLoja";
 import GestaoCRM from "../../components/GestaoCRM";
 
 export default function PainelLojista() {
-  const [slug, setSlug] = useState("");
   const [tenant, setTenant] = useState<any>(null);
   const [produtos, setProdutos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [abaAtiva, setAbaAtiva] = useState("inicio"); 
   const [menuLojaAberto, setMenuLojaAberto] = useState(false);
 
+  // Estados para o formulário de Login / Cadastro
+  const [modoAuth, setModoAuth] = useState<"login" | "cadastro">("login");
+  const [email, setEmail] = useState("");
+  const [senha, setSenha] = useState("");
+  const [confirmarSenha, setConfirmarSenha] = useState("");
+  const [nomeRestaurante, setNomeRestaurante] = useState("");
+  const [nomeResponsavel, setNomeResponsavel] = useState("");
+  const [slugGerado, setSlugGerado] = useState("");
+
+  // Efeito mágico: gera o subdomínio automaticamente enquanto ele digita o nome
+  useEffect(() => {
+    if (modoAuth === "cadastro") {
+      const gerado = nomeRestaurante
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "") // Remove acentos
+        .replace(/[^a-z0-9]/g, ""); // Remove espaços e caracteres especiais
+      setSlugGerado(gerado);
+    }
+  }, [nomeRestaurante, modoAuth]);
+
   useEffect(() => {
     const slugSalvo = localStorage.getItem("@saas_admin_slug");
     if (slugSalvo) {
-      setSlug(slugSalvo);
-      fazerLogin(slugSalvo);
+      verificarSessao(slugSalvo);
     } else {
       setLoading(false);
     }
@@ -34,7 +53,7 @@ export default function PainelLojista() {
     if (tenantData) setTenant(tenantData);
   };
 
-  const fazerLogin = async (slugParaBuscar: string) => {
+  const verificarSessao = async (slugParaBuscar: string) => {
     setLoading(true);
     const { data: tenantData } = await supabase.from("tenants").select("*").eq("slug", slugParaBuscar).single();
     
@@ -44,7 +63,63 @@ export default function PainelLojista() {
       await buscarDados(tenantData.id);
     } else {
       localStorage.removeItem("@saas_admin_slug");
-      alert("Restaurante não encontrado!");
+    }
+    setLoading(false);
+  };
+
+  const fazerLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    // Busca o restaurante pelo email e senha
+    const { data: tenantData } = await supabase
+      .from("tenants")
+      .select("*")
+      .eq("email", email)
+      .eq("senha", senha)
+      .single();
+    
+    if (tenantData) {
+      localStorage.setItem("@saas_admin_slug", tenantData.slug);
+      setTenant(tenantData);
+      await buscarDados(tenantData.id);
+    } else {
+      alert("E-mail ou senha incorretos!");
+    }
+    setLoading(false);
+  };
+
+  const fazerCadastro = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (senha !== confirmarSenha) {
+      alert("As senhas não coincidem!");
+      return;
+    }
+    setLoading(true);
+
+    // Salva o novo restaurante no banco de dados
+    const { data, error } = await supabase
+      .from("tenants")
+      .insert([
+        {
+          name: nomeRestaurante,
+          slug: slugGerado,
+          nome_responsavel: nomeResponsavel,
+          email: email,
+          senha: senha,
+          plan_tier: "free" // Plano inicial padrão
+        }
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      console.error(error);
+      alert("Erro ao criar conta. Talvez este subdomínio ou e-mail já esteja em uso.");
+    } else if (data) {
+      // Entra automaticamente após criar a conta
+      localStorage.setItem("@saas_admin_slug", data.slug);
+      setTenant(data);
+      await buscarDados(data.id);
     }
     setLoading(false);
   };
@@ -52,24 +127,74 @@ export default function PainelLojista() {
   const handleSair = () => {
     localStorage.removeItem("@saas_admin_slug");
     setTenant(null);
-    setSlug("");
+    setEmail("");
+    setSenha("");
   };
 
+  // TELA DE LOGIN / CADASTRO
   if (!tenant) {
     return (
       <div className="min-h-screen bg-zinc-900 flex items-center justify-center p-4">
-        <form onSubmit={(e) => { e.preventDefault(); fazerLogin(slug); }} className="bg-zinc-800 p-8 rounded-xl max-w-md w-full border border-zinc-700 shadow-2xl">
-          <h1 className="text-2xl font-bold text-white mb-2">Acesso ao Painel</h1>
-          <p className="text-zinc-400 mb-6 text-sm">Digite o seu subdomínio para gerir as suas vendas.</p>
-          <input type="text" value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase())} placeholder="ex: esquinasbar" className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white mb-4 focus:ring-2 focus:ring-blue-500 outline-none" required />
-          <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700">
-            {loading ? "A entrar..." : "Aceder Máquina de Vendas"}
-          </button>
-        </form>
+        <div className="bg-zinc-800 p-8 rounded-xl max-w-md w-full border border-zinc-700 shadow-2xl">
+          
+          {/* Abas de Navegação */}
+          <div className="flex gap-4 mb-8 border-b border-zinc-700 pb-4">
+            <button 
+              onClick={() => setModoAuth("login")}
+              className={`flex-1 font-bold text-center pb-2 transition-colors ${modoAuth === "login" ? "text-blue-500 border-b-2 border-blue-500" : "text-zinc-500 hover:text-zinc-300"}`}
+            >
+              Entrar
+            </button>
+            <button 
+              onClick={() => setModoAuth("cadastro")}
+              className={`flex-1 font-bold text-center pb-2 transition-colors ${modoAuth === "cadastro" ? "text-blue-500 border-b-2 border-blue-500" : "text-zinc-500 hover:text-zinc-300"}`}
+            >
+              Criar Conta
+            </button>
+          </div>
+
+          {modoAuth === "login" ? (
+            <form onSubmit={fazerLogin} className="flex flex-col gap-4 animate-in fade-in">
+              <h1 className="text-2xl font-bold text-white mb-2">Bem-vindo de volta!</h1>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Seu e-mail" className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:ring-2 focus:ring-blue-500 outline-none" required />
+              <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Sua senha" className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:ring-2 focus:ring-blue-500 outline-none" required />
+              <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white font-bold py-3 mt-4 rounded-lg hover:bg-blue-700 transition-colors">
+                {loading ? "A acessar..." : "Entrar no Painel"}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={fazerCadastro} className="flex flex-col gap-4 animate-in fade-in">
+              <h1 className="text-2xl font-bold text-white mb-2">Configure o seu Delivery</h1>
+              
+              <input type="text" value={nomeRestaurante} onChange={(e) => setNomeRestaurante(e.target.value)} placeholder="Nome do Restaurante (ex: Esquinas Bar)" className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:ring-2 focus:ring-blue-500 outline-none" required />
+              
+              {/* O Subdomínio Gerado (Apenas Leitura) */}
+              {slugGerado && (
+                 <div className="flex items-center bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 opacity-70">
+                   <span className="text-zinc-500">app.seusite.com/</span>
+                   <span className="text-blue-400 font-bold ml-1">{slugGerado}</span>
+                 </div>
+              )}
+
+              <input type="text" value={nomeResponsavel} onChange={(e) => setNomeResponsavel(e.target.value)} placeholder="Nome do Responsável" className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:ring-2 focus:ring-blue-500 outline-none" required />
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-mail de acesso" className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:ring-2 focus:ring-blue-500 outline-none" required />
+              
+              <div className="flex gap-2">
+                <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Senha" className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:ring-2 focus:ring-blue-500 outline-none" required />
+                <input type="password" value={confirmarSenha} onChange={(e) => setConfirmarSenha(e.target.value)} placeholder="Confirme" className="w-full px-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white focus:ring-2 focus:ring-blue-500 outline-none" required />
+              </div>
+
+              <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white font-bold py-3 mt-4 rounded-lg hover:bg-blue-700 transition-colors">
+                {loading ? "A criar..." : "Criar Meu Negócio"}
+              </button>
+            </form>
+          )}
+        </div>
       </div>
     );
   }
 
+  // TELA DO PAINEL (Permanece intacta com as suas rotas e blindagens)
   return (
     <div className="min-h-screen bg-zinc-50 flex font-sans">
       <aside className="w-64 bg-white border-r border-zinc-200 hidden md:flex flex-col min-h-screen shadow-sm z-10">
@@ -78,7 +203,10 @@ export default function PainelLojista() {
             <div className="w-8 h-8 flex-shrink-0 bg-blue-600 rounded flex items-center justify-center text-white font-black text-sm">
               {tenant.name.charAt(0)}
             </div>
-            <h2 className="text-zinc-900 font-black text-lg tracking-tight truncate">{tenant.name}</h2>
+            <div className="flex flex-col">
+              <h2 className="text-zinc-900 font-black text-lg tracking-tight truncate">{tenant.name}</h2>
+              <span className="text-xs text-zinc-500 font-medium">Plano: <span className="uppercase text-blue-600">{tenant.plan_tier || 'Free'}</span></span>
+            </div>
           </div>
         </div>
         
