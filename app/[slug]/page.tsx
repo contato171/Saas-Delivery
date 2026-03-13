@@ -19,8 +19,10 @@ export default function VitrineLoja() {
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
   
-  // Estado para controlar o modal de compra do produto
+  // O cérebro que estava faltando: controla o que abre e o que fecha
   const [produtoSelecionado, setProdutoSelecionado] = useState<any>(null);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
   useEffect(() => {
     if (slug) {
@@ -71,7 +73,7 @@ export default function VitrineLoja() {
   const categoriasUnicas = Array.from(new Set(produtosFiltrados.map(p => p.categoria || "Gerais")));
 
   return (
-    <CartProvider>
+    <CartProvider tenantId={tenant.id}>
       <div className="min-h-screen bg-zinc-50 font-sans pb-20">
         
         {/* HEADER: Capa e Logo */}
@@ -183,7 +185,8 @@ export default function VitrineLoja() {
 
         </div>
 
-        {/* COMPONENTES DE COMPRA E CARRINHO */}
+        {/* --- CONTROLE DE MODAIS (A SOLUÇÃO DO PROBLEMA) --- */}
+        
         {produtoSelecionado && (
           <ModalProduto
             produto={produtoSelecionado}
@@ -192,10 +195,28 @@ export default function VitrineLoja() {
           />
         )}
 
-        {/* O TENANT DEVE ESTAR AQUI PARA O CHECKOUT NÃO TRAVAR A TELA */}
-        <CarrinhoFlutuante tenant={tenant} />
-        <CarrinhoLateral tenant={tenant} />
-        <CheckoutModal tenant={tenant} />
+        {/* Carrinho flutuante (ícone lá embaixo) clica para abrir a lateral */}
+        <CarrinhoFlutuante tenant={tenant} onClick={() => setIsCartOpen(true)} />
+
+        {/* Carrinho Lateral SÓ aparece se isCartOpen for true */}
+        {isCartOpen && (
+          <CarrinhoLateral 
+            tenant={tenant} 
+            onClose={() => setIsCartOpen(false)} 
+            onCheckout={() => {
+              setIsCartOpen(false);      // Fecha o carrinho
+              setIsCheckoutOpen(true);   // Abre o checkout
+            }} 
+          />
+        )}
+
+        {/* Checkout SÓ aparece se isCheckoutOpen for true */}
+        {isCheckoutOpen && (
+          <CheckoutModal 
+            tenant={tenant} 
+            onClose={() => setIsCheckoutOpen(false)} 
+          />
+        )}
         
         <style dangerouslySetInnerHTML={{__html: `
           .hide-scrollbar::-webkit-scrollbar { display: none; }
