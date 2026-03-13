@@ -28,8 +28,8 @@ export async function POST(req: Request) {
         tenantId: tenantId,
       },
       // Usando o baseUrl blindado
-      success_url: `${baseUrl}/painel?sucesso=true`,
-      cancel_url: `${baseUrl}/#planos`,
+      success_url: 'https://saas-delivery-seven.vercel.app/painel?sucesso=true',
+      cancel_url: 'https://saas-delivery-seven.vercel.app/planos',
       customer_email: customerEmail || undefined,
     });
 
