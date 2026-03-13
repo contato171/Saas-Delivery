@@ -19,7 +19,7 @@ export default function VitrineLoja() {
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
   
-  // O cérebro que estava faltando: controla o que abre e o que fecha
+  // O cérebro da tela: controla o que abre e fecha
   const [produtoSelecionado, setProdutoSelecionado] = useState<any>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
@@ -59,7 +59,6 @@ export default function VitrineLoja() {
     return <div className="min-h-screen bg-zinc-50 flex items-center justify-center text-zinc-500 font-medium">Restaurante não encontrado.</div>;
   }
 
-  // --- INTELIGÊNCIA DA VITRINE ---
   const produtosFiltrados = produtos.filter((p) => 
     p.name.toLowerCase().includes(busca.toLowerCase()) || 
     (p.description && p.description.toLowerCase().includes(busca.toLowerCase()))
@@ -99,7 +98,6 @@ export default function VitrineLoja() {
 
         <div className="max-w-5xl mx-auto px-4 sm:px-6 mt-8">
           
-          {/* BARRA DE BUSCA */}
           <div className="relative mb-10">
             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
               <span className="text-zinc-400">🔍</span>
@@ -113,7 +111,6 @@ export default function VitrineLoja() {
             />
           </div>
 
-          {/* SESSÃO DE DESTAQUES */}
           {destaques.length > 0 && busca === "" && (
             <div className="mb-12">
               <h2 className="text-xl font-bold text-zinc-900 mb-4 tracking-tight">Destaques</h2>
@@ -140,7 +137,6 @@ export default function VitrineLoja() {
             </div>
           )}
 
-          {/* LISTAGEM POR CATEGORIAS */}
           <div className="flex flex-col gap-10">
             {categoriasUnicas.map((categoria) => {
               const produtosDaCategoria = produtosFiltrados.filter(p => (p.categoria || "Gerais") === categoria);
@@ -175,18 +171,10 @@ export default function VitrineLoja() {
                 </div>
               );
             })}
-            
-            {produtosFiltrados.length === 0 && (
-              <div className="text-center py-12 text-zinc-500">
-                Nenhum produto encontrado para "{busca}".
-              </div>
-            )}
           </div>
-
         </div>
 
-        {/* --- CONTROLE DE MODAIS (A SOLUÇÃO DO PROBLEMA) --- */}
-        
+        {/* MODAIS: A ordem correta sem travar a tela */}
         {produtoSelecionado && (
           <ModalProduto
             produto={produtoSelecionado}
@@ -195,25 +183,27 @@ export default function VitrineLoja() {
           />
         )}
 
-        {/* Carrinho flutuante (ícone lá embaixo) clica para abrir a lateral */}
-        <CarrinhoFlutuante tenant={tenant} onClick={() => setIsCartOpen(true)} />
+        {/* O flutuante abre a lateral */}
+        <div onClick={() => setIsCartOpen(true)}>
+          <CarrinhoFlutuante tenant={tenant} />
+        </div>
 
-        {/* Carrinho Lateral SÓ aparece se isCartOpen for true */}
+        {/* A lateral fecha ela mesma e abre o checkout */}
         {isCartOpen && (
           <CarrinhoLateral 
             tenant={tenant} 
             onClose={() => setIsCartOpen(false)} 
             onCheckout={() => {
-              setIsCartOpen(false);      // Fecha o carrinho
-              setIsCheckoutOpen(true);   // Abre o checkout
+              setIsCartOpen(false);
+              setIsCheckoutOpen(true);
             }} 
           />
         )}
 
-        {/* Checkout SÓ aparece se isCheckoutOpen for true */}
         {isCheckoutOpen && (
           <CheckoutModal 
             tenant={tenant} 
+            isOpen={isCheckoutOpen}
             onClose={() => setIsCheckoutOpen(false)} 
           />
         )}
