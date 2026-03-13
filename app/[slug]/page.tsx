@@ -7,6 +7,7 @@ import { useParams } from "next/navigation";
 import ModalProduto from "../../components/ModalProduto";
 import CarrinhoFlutuante from "../../components/CarrinhoFlutuante";
 import CarrinhoLateral from "../../components/CarrinhoLateral";
+import CheckoutModal from "../../components/CheckoutModal";
 import { CartProvider } from "../../components/CartContext";
 
 export default function VitrineLoja() {
@@ -191,8 +192,10 @@ export default function VitrineLoja() {
           />
         )}
 
-        <CarrinhoFlutuante />
-        <CarrinhoLateral />
+        {/* O TENANT DEVE ESTAR AQUI PARA O CHECKOUT NÃO TRAVAR A TELA */}
+        <CarrinhoFlutuante tenant={tenant} />
+        <CarrinhoLateral tenant={tenant} />
+        <CheckoutModal tenant={tenant} />
         
         <style dangerouslySetInnerHTML={{__html: `
           .hide-scrollbar::-webkit-scrollbar { display: none; }
