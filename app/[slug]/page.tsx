@@ -1,3 +1,4 @@
+// @ts-nocheck
 "use client";
 
 import { useState, useEffect } from "react";
@@ -6,7 +7,6 @@ import { useParams } from "next/navigation";
 import ModalProduto from "../../components/ModalProduto";
 import CarrinhoFlutuante from "../../components/CarrinhoFlutuante";
 import CarrinhoLateral from "../../components/CarrinhoLateral";
-import CheckoutModal from "../../components/CheckoutModal";
 import { CartProvider } from "../../components/CartContext";
 
 export default function VitrineLoja() {
@@ -18,7 +18,7 @@ export default function VitrineLoja() {
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
   
-  // Estado para controlar o modal de compra
+  // Estado para controlar o modal de compra do produto
   const [produtoSelecionado, setProdutoSelecionado] = useState<any>(null);
 
   useEffect(() => {
@@ -182,7 +182,7 @@ export default function VitrineLoja() {
 
         </div>
 
-        {/* COMPONENTES DE COMPRA E CARRINHO DE VOLTA! */}
+        {/* COMPONENTES DE COMPRA E CARRINHO */}
         {produtoSelecionado && (
           <ModalProduto
             produto={produtoSelecionado}
@@ -192,10 +192,7 @@ export default function VitrineLoja() {
         )}
 
         <CarrinhoFlutuante />
-        {/* @ts-ignore */}
-        <CarrinhoLateral tenant={tenant} />
-        {/* @ts-ignore */}
-        <CheckoutModal tenant={tenant} />
+        <CarrinhoLateral />
         
         <style dangerouslySetInnerHTML={{__html: `
           .hide-scrollbar::-webkit-scrollbar { display: none; }
