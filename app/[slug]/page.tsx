@@ -1,131 +1,176 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
-import ModalProduto from "../../components/ModalProduto";
-import CheckoutModal from "../../components/CheckoutModal";
-import CarrinhoLateral from "../../components/CarrinhoLateral";
-import { useCart } from "../../components/CartContext";
-import { ShoppingBag, Loader2, MapPin, Clock } from "lucide-react";
+import { useParams } from "next/navigation";
 
-export default function VitrineLoja({ params }: { params: Promise<{ slug: string }> }) {
-  const resolvedParams = use(params);
-  const slug = resolvedParams.slug;
+export default function VitrineLoja() {
+  const params = useParams();
+  const slug = params?.slug as string;
 
   const [tenant, setTenant] = useState<any>(null);
   const [produtos, setProdutos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  const [produtoSelecionado, setProdutoSelecionado] = useState<any>(null);
-  
-  // Controles de Tela Independentes
-  const [carrinhoAberto, setCarrinhoAberto] = useState(false);
-  const [checkoutAberto, setCheckoutAberto] = useState(false);
-
-  const cartInfo = useCart() as any;
-  const itens = cartInfo.itens || [];
+  const [busca, setBusca] = useState("");
 
   useEffect(() => {
-    async function carregarVitrine() {
-      const { data: tenantData } = await supabase.from("tenants").select("*").eq("slug", slug).single();
-      if (tenantData) {
-        setTenant(tenantData);
-        const { data: produtosData } = await supabase.from("products").select("*").eq("tenant_id", tenantData.id);
-        if (produtosData) setProdutos(produtosData);
-      }
-      setLoading(false);
+    if (slug) {
+      carregarLoja();
     }
-    carregarVitrine();
   }, [slug]);
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center bg-zinc-50"><Loader2 className="animate-spin text-red-600" size={40}/></div>;
-  if (!tenant) return <div className="min-h-screen flex items-center justify-center bg-zinc-50 text-zinc-500 font-bold">Loja não encontrada.</div>;
+  const carregarLoja = async () => {
+    setLoading(true);
+    // Busca os dados do Restaurante
+    const { data: tenantData } = await supabase
+      .from("tenants")
+      .select("*")
+      .eq("slug", slug)
+      .single();
 
-  const produtosPorCategoria = produtos.reduce((acc: any, produto: any) => {
-    const cat = produto.category || "Geral";
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(produto);
-    return acc;
-  }, {});
+    if (tenantData) {
+      setTenant(tenantData);
+      // Busca os produtos e já ordena pelos mais vendidos (inteligência do sistema)
+      const { data: produtosData } = await supabase
+        .from("products")
+        .select("*")
+        .eq("tenant_id", tenantData.id)
+        .order("total_vendas", { ascending: false });
 
-  const totalCarrinhoNumber = cartInfo.totalCarrinho || 0;
+      setProdutos(produtosData || []);
+    }
+    setLoading(false);
+  };
+
+  if (loading) {
+    return <div className="min-h-screen bg-zinc-50 flex items-center justify-center text-zinc-500 font-medium">Carregando cardápio...</div>;
+  }
+
+  if (!tenant) {
+    return <div className="min-h-screen bg-zinc-50 flex items-center justify-center text-zinc-500 font-medium">Restaurante não encontrado.</div>;
+  }
+
+  // --- INTELIGÊNCIA DA VITRINE ---
+
+  // 1. Filtro de Busca
+  const produtosFiltrados = produtos.filter((p) => 
+    p.name.toLowerCase().includes(busca.toLowerCase()) || 
+    (p.description && p.description.toLowerCase().includes(busca.toLowerCase()))
+  );
+
+  // 2. Lógica de Destaques (Se o lojista não escolher, pegamos os Top Vendas)
+  let destaques = produtosFiltrados.filter(p => p.destaque);
+  if (destaques.length === 0) {
+    destaques = produtosFiltrados.slice(0, 4); // Pega os 4 mais vendidos
+  }
+
+  // 3. Agrupamento por Categorias (Dinâmico)
+  const categoriasUnicas = Array.from(new Set(produtosFiltrados.map(p => p.categoria || "Gerais")));
 
   return (
-    <div className="min-h-screen bg-zinc-50 font-sans pb-24">
+    <div className="min-h-screen bg-zinc-50 font-sans pb-20">
       
-      <header className="bg-white border-b border-zinc-200 pt-6 pb-6 px-4 shadow-sm sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-red-600 text-white rounded-2xl flex items-center justify-center text-2xl font-black shadow-md shrink-0">
-              {tenant.name.charAt(0)}
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-zinc-900 leading-tight">{tenant.name}</h1>
-              <div className="flex items-center gap-2 text-xs text-zinc-500 mt-1 font-medium">
-                <span className="flex items-center gap-1 bg-zinc-100 px-2 py-1 rounded-md"><MapPin size={12}/> Raio {tenant.delivery_radius_km || 10}km</span>
-                <span className="flex items-center gap-1 bg-zinc-100 px-2 py-1 rounded-md"><Clock size={12}/> 30-45 min</span>
-              </div>
+      {/* HEADER: Capa e Logo (Estilo iFood) */}
+      <div className="w-full h-40 md:h-64 bg-zinc-200 relative">
+        {/* Aqui no futuro pode entrar a imagem de capa do restaurante */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+      </div>
+      
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 relative -mt-12 md:-mt-16">
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-zinc-100 flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
+          <div className="w-24 h-24 md:w-32 md:h-32 bg-zinc-100 rounded-full border-4 border-white shadow-md flex items-center justify-center text-3xl shrink-0 overflow-hidden">
+            {/* Foto de perfil ou Letra inicial */}
+            <span className="font-black text-zinc-400">{tenant.name.charAt(0)}</span>
+          </div>
+          <div className="text-center sm:text-left pt-2 md:pt-6 flex-1">
+            <h1 className="text-2xl md:text-3xl font-bold text-zinc-900">{tenant.name}</h1>
+            <div className="flex items-center justify-center sm:justify-start gap-2 mt-2 text-sm text-zinc-500">
+              <span className="text-amber-500 font-bold">★ 4.9</span>
+              <span>•</span>
+              <span>Lanches e Bebidas</span>
             </div>
           </div>
-
-          {/* SACOLA NO CANTO SUPERIOR DIREITO */}
-          <button 
-            onClick={() => setCarrinhoAberto(true)}
-            className="flex items-center gap-3 bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-xl font-bold transition-all shadow-md active:scale-95"
-          >
-            <div className="relative">
-              <ShoppingBag size={20} />
-              {itens.length > 0 && (
-                <span className="absolute -top-2 -right-2 bg-zinc-900 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full border-2 border-red-600">
-                  {itens.length}
-                </span>
-              )}
-            </div>
-            <span className="hidden sm:inline">R$ {totalCarrinhoNumber.toFixed(2).replace('.', ',')}</span>
-          </button>
         </div>
-      </header>
+      </div>
 
-      <main className="max-w-4xl mx-auto px-4 py-8 space-y-10">
-        {Object.keys(produtosPorCategoria).map(categoria => (
-          <div key={categoria} className="animate-in fade-in">
-            <h2 className="text-xl font-bold text-zinc-900 mb-4">{categoria}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {produtosPorCategoria[categoria].map((prod: any) => (
-                <div key={prod.id} onClick={() => setProdutoSelecionado(prod)} className="bg-white border border-zinc-200 rounded-xl p-4 flex gap-4 cursor-pointer hover:shadow-md transition-shadow group">
-                  <div className="flex-1">
-                    <h3 className="font-bold text-zinc-900 text-sm leading-tight group-hover:text-red-600 transition-colors">{prod.name}</h3>
-                    <p className="text-xs text-zinc-500 mt-1 line-clamp-2">{prod.description}</p>
-                    <p className="font-black text-red-600 mt-3">R$ {Number(prod.price).toFixed(2).replace('.', ',')}</p>
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 mt-8">
+        
+        {/* BARRA DE BUSCA */}
+        <div className="relative mb-10">
+          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+            <span className="text-zinc-400">🔍</span>
+          </div>
+          <input
+            type="text"
+            placeholder="Buscar no cardápio"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            className="w-full pl-12 pr-4 py-4 bg-white border border-zinc-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all shadow-sm text-zinc-800 placeholder:text-zinc-400"
+          />
+        </div>
+
+        {/* SESSÃO DE DESTAQUES (Carrossel Horizontal) */}
+        {destaques.length > 0 && busca === "" && (
+          <div className="mb-12">
+            <h2 className="text-xl font-bold text-zinc-900 mb-4 tracking-tight">Destaques</h2>
+            <div className="flex overflow-x-auto gap-4 pb-4 snap-x hide-scrollbar">
+              {destaques.map((produto) => (
+                <div key={produto.id} className="min-w-[260px] max-w-[260px] sm:min-w-[280px] bg-white border border-zinc-200 rounded-xl p-4 cursor-pointer hover:shadow-md transition-shadow snap-start flex flex-col">
+                  <div className="w-full h-36 bg-zinc-100 rounded-lg mb-4 flex items-center justify-center overflow-hidden shrink-0">
+                    <span className="text-4xl opacity-50">🍔</span>
                   </div>
-                  {prod.image_url && (
-                    <div className="w-24 h-24 bg-zinc-100 rounded-xl overflow-hidden shrink-0 border border-zinc-100">
-                      <img src={prod.image_url} alt={prod.name} className="w-full h-full object-cover"/>
-                    </div>
-                  )}
+                  <h3 className="font-semibold text-zinc-800 leading-tight mb-1">{produto.name}</h3>
+                  <p className="text-xs text-zinc-500 line-clamp-2 mb-3 flex-1">{produto.description}</p>
+                  <span className="font-bold text-emerald-600 block">R$ {Number(produto.price).toFixed(2).replace('.', ',')}</span>
                 </div>
               ))}
             </div>
           </div>
-        ))}
-      </main>
+        )}
 
-      {produtoSelecionado && <ModalProduto produto={produtoSelecionado} tenantId={tenant.id} onClose={() => setProdutoSelecionado(null)} />}
+        {/* LISTAGEM POR CATEGORIAS (Grade 2 Colunas) */}
+        <div className="flex flex-col gap-10">
+          {categoriasUnicas.map((categoria) => {
+            const produtosDaCategoria = produtosFiltrados.filter(p => (p.categoria || "Gerais") === categoria);
+            
+            if (produtosDaCategoria.length === 0) return null;
+
+            return (
+              <div key={categoria}>
+                <h2 className="text-xl font-bold text-zinc-900 mb-4 tracking-tight">{categoria}</h2>
+                {/* Grade dividida: 1 coluna no celular, 2 no PC */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {produtosDaCategoria.map((produto) => (
+                    <div key={produto.id} className="bg-white border border-zinc-200 rounded-xl p-4 cursor-pointer hover:shadow-md hover:border-zinc-300 transition-all flex justify-between gap-4">
+                      <div className="flex flex-col flex-1">
+                        <h3 className="font-semibold text-zinc-800 mb-1">{produto.name}</h3>
+                        <p className="text-sm text-zinc-500 line-clamp-2 mb-3 leading-relaxed">{produto.description}</p>
+                        <span className="font-medium text-emerald-600 mt-auto">R$ {Number(produto.price).toFixed(2).replace('.', ',')}</span>
+                      </div>
+                      <div className="w-28 h-28 bg-zinc-100 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
+                         <span className="text-3xl opacity-50">🍔</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          
+          {produtosFiltrados.length === 0 && (
+            <div className="text-center py-12 text-zinc-500">
+              Nenhum produto encontrado para "{busca}".
+            </div>
+          )}
+        </div>
+
+      </div>
       
-      {/* ABRE A GAVETA LATERAL PRIMEIRO */}
-      {carrinhoAberto && (
-        <CarrinhoLateral 
-          tenant={tenant} 
-          onClose={() => setCarrinhoAberto(false)} 
-          onCheckout={() => {
-            setCarrinhoAberto(false);
-            setCheckoutAberto(true);
-          }} 
-        />
-      )}
-
-      {/* O CHECKOUT SÓ ABRE DEPOIS QUE SAIR DA GAVETA */}
-      {checkoutAberto && <CheckoutModal onClose={() => setCheckoutAberto(false)} />}
+      {/* Estilo extra para esconder a barra de rolagem no carrossel sem perder a função */}
+      <style dangerouslySetInnerHTML={{__html: `
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      `}} />
     </div>
   );
 }
