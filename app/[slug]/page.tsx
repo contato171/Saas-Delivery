@@ -1,7 +1,7 @@
 // @ts-nocheck
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "../../lib/supabase";
 import { useParams } from "next/navigation";
 import ModalProduto from "../../components/ModalProduto";
@@ -9,6 +9,7 @@ import CarrinhoFlutuante from "../../components/CarrinhoFlutuante";
 import CarrinhoLateral from "../../components/CarrinhoLateral";
 import CheckoutModal from "../../components/CheckoutModal";
 import { CartProvider } from "../../components/CartContext";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function VitrineLoja() {
   const params = useParams();
@@ -22,6 +23,9 @@ export default function VitrineLoja() {
   const [produtoSelecionado, setProdutoSelecionado] = useState<any>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+
+  // Ref para as setas do carrossel
+  const carouselRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (slug) {
@@ -51,6 +55,18 @@ export default function VitrineLoja() {
     setLoading(false);
   };
 
+  const scrollEsquerda = () => {
+    if (carouselRef.current) {
+      carouselRef.current.scrollBy({ left: -300, behavior: 'smooth' });
+    }
+  };
+
+  const scrollDireita = () => {
+    if (carouselRef.current) {
+      carouselRef.current.scrollBy({ left: 300, behavior: 'smooth' });
+    }
+  };
+
   if (loading) {
     return <div className="min-h-screen bg-zinc-50 flex items-center justify-center text-zinc-500 font-medium">Carregando cardápio...</div>;
   }
@@ -64,12 +80,19 @@ export default function VitrineLoja() {
     (p.description && p.description.toLowerCase().includes(busca.toLowerCase()))
   );
 
-  // MÁGICA 2: Destaques baseados em volume de vendas (ou os 5 primeiros se a loja for nova)
   const destaques = [...produtosFiltrados]
     .sort((a, b) => (b.total_vendas || 0) - (a.total_vendas || 0))
     .slice(0, 5);
 
-  const categoriasUnicas = Array.from(new Set(produtosFiltrados.map(p => p.categories?.name || "Gerais")));
+  let categoriasUnicas = Array.from(new Set(produtosFiltrados.map(p => p.categories?.name || "Gerais")));
+
+  // MÁGICA 1: Ordena as categorias automaticamente pelo produto mais caro dentro delas!
+  // Isso garante que Pratos Principais, Combos e Pizzas subam pro topo, enquanto Bebidas e Doces desçam.
+  categoriasUnicas.sort((catA, catB) => {
+    const maxPrecoA = Math.max(...produtosFiltrados.filter(p => (p.categories?.name || "Gerais") === catA).map(p => Number(p.price) || 0));
+    const maxPrecoB = Math.max(...produtosFiltrados.filter(p => (p.categories?.name || "Gerais") === catB).map(p => Number(p.price) || 0));
+    return maxPrecoB - maxPrecoA;
+  });
 
   return (
     <CartProvider tenantId={tenant.id}>
@@ -117,10 +140,23 @@ export default function VitrineLoja() {
             />
           </div>
 
+          {/* MÁGICA 2: Setas de Navegação no Carrossel */}
           {destaques.length > 0 && busca === "" && (
-            <div className="mb-12">
-              <h2 className="text-xl font-bold text-zinc-900 mb-4 tracking-tight">Os Mais Pedidos 🔥</h2>
-              <div className="flex overflow-x-auto gap-4 pb-4 snap-x hide-scrollbar">
+            <div className="mb-12 relative group">
+              <div className="flex justify-between items-end mb-4">
+                <h2 className="text-xl font-bold text-zinc-900 tracking-tight">Os Mais Pedidos 🔥</h2>
+                
+                <div className="hidden sm:flex gap-2">
+                  <button onClick={scrollEsquerda} className="p-2 rounded-full border border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-600 transition-colors shadow-sm">
+                    <ChevronLeft size={20}/>
+                  </button>
+                  <button onClick={scrollDireita} className="p-2 rounded-full border border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-600 transition-colors shadow-sm">
+                    <ChevronRight size={20}/>
+                  </button>
+                </div>
+              </div>
+              
+              <div ref={carouselRef} className="flex overflow-x-auto gap-4 pb-4 snap-x hide-scrollbar scroll-smooth">
                 {destaques.map((produto) => (
                   <div 
                     key={produto.id} 
@@ -164,7 +200,7 @@ export default function VitrineLoja() {
                           <p className="text-sm text-zinc-500 line-clamp-2 mb-3 leading-relaxed">{produto.description}</p>
                           <span className="font-medium text-emerald-600 mt-auto">R$ {Number(produto.price).toFixed(2).replace('.', ',')}</span>
                         </div>
-                        <div className="w-28 h-28 bg-zinc-100 rounded-lg flex items-center justify-center shrink-0 overflow-hidden">
+                        <div className="w-28 h-28 bg-zinc-100 rounded-lg flex items-center justify-center shrink-0 overflow-hidden border border-zinc-100">
                           {produto.image_url ? (
                             <img src={produto.image_url} alt={produto.name} className="w-full h-full object-cover" />
                           ) : (
