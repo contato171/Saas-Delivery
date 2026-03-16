@@ -117,17 +117,16 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
     window.location.href = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&state=${tenantId}&scope=${scope}`;
   };
 
-  // MÁGICA DO LINK DIRETO DE PAGAMENTO DA META
+  // MÁGICA ATUALIZADA DO LINK DIRETO PARA O NOVO BILLING HUB
   const handleAdicionarSaldoMeta = () => {
     if (!contaSelecionada) {
-      alert("Para adicionar saldo, primeiro selecione a sua Conta de Anúncios na 'Etapa 3 - Conexões do Facebook' lá embaixo!");
+      alert("Por favor, selecione primeiro a sua Conta de Anúncios na seção acima!");
       return;
     }
-    // Remove o prefixo 'act_' que a API da Meta usa, para gerar o link limpo do Gerenciador
+    // O Billing Hub usa o asset_id com apenas os números
     const actId = contaSelecionada.replace("act_", "");
-    const linkFaturamento = `https://adsmanager.facebook.com/adsmanager/billing?act=${actId}`;
+    const linkFaturamento = `https://business.facebook.com/billing_hub/accounts/details?asset_id=${actId}`;
     
-    // Abre direto na aba de pagamentos da conta exata dele
     window.open(linkFaturamento, "_blank");
   };
 
@@ -282,7 +281,7 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px]">
         <Loader2 className="animate-spin text-indigo-600 mb-4" size={40} />
-        <p className="text-zinc-500 font-bold">Carregando seus produtos e conexões...</p>
+        <p className="text-zinc-500 font-bold">Verificando conexões e saldo...</p>
       </div>
     );
   }
@@ -290,7 +289,7 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
   return (
     <div className="space-y-6 text-zinc-900 font-sans pb-20 animate-in fade-in">
       
-      {/* HEADER DA TELA E ACESSO AO SALDO DA META */}
+      {/* HEADER DA TELA */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
           <h1 className="text-3xl font-black tracking-tight flex items-center gap-3">
@@ -299,24 +298,6 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
           </h1>
           <p className="text-zinc-500 mt-1">Crie anúncios automáticos que vendem enquanto você dorme.</p>
         </div>
-
-        {/* BOTÃO INTELIGENTE DE SALDO */}
-        {isFacebookConnected && accessToken && (
-          <div className="bg-white border border-zinc-200 shadow-sm rounded-2xl p-4 flex items-center gap-6 w-full md:w-auto">
-            <div>
-              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1 flex items-center gap-1"><Wallet size={12}/> Conta de Anúncios</p>
-              <p className="text-sm font-bold text-zinc-800">
-                Gerenciar Faturamento
-              </p>
-            </div>
-            <button 
-              onClick={handleAdicionarSaldoMeta}
-              className="bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold py-2.5 px-4 rounded-xl text-sm transition-all flex items-center gap-2 whitespace-nowrap shadow-md shadow-blue-500/20"
-            >
-              Adicionar Saldo (PIX) <ExternalLink size={16}/>
-            </button>
-          </div>
-        )}
       </div>
 
       {/* BLOCO DE CONEXÃO COM O FACEBOOK */}
@@ -378,7 +359,7 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
                   <div className="bg-indigo-50 border border-indigo-200 p-6 rounded-2xl animate-in slide-in-from-top-4 flex flex-col md:flex-row items-center gap-6">
                     <div className="flex-1">
                       <h3 className="font-black text-indigo-900 text-lg flex items-center gap-2"><Film size={20}/> Subir Mídia de Alta Conversão</h3>
-                      <p className="text-sm text-indigo-700 mt-1 mb-4">Por padrão, usaremos a foto do cardápio do <strong>{produtosSelecionados[0].name}</strong>. Mas se você tiver um vídeo Reels ou arte, suba aqui! Vídeos chamam 3x mais atenção.</p>
+                      <p className="text-sm text-indigo-700 mt-1 mb-4">Por padrão, usaremos a foto do cardápio do <strong>{produtosSelecionados[0].name}</strong>. Mas se você tiver um vídeo Reels mostrando o produto, ou uma arte pronta, suba aqui! Vídeos chamam 3x mais atenção.</p>
                       
                       <label className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-3 rounded-xl cursor-pointer transition-colors shadow-md">
                         <UploadCloud size={20}/>
@@ -551,6 +532,22 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
                           <input type="number" min="1" value={diasVeiculacao} onChange={(e) => setDiasVeiculacao(Number(e.target.value))} className="w-full border border-zinc-300 rounded-lg p-3 text-xl font-black text-zinc-900" />
                         </div>
                     </div>
+
+                    {/* BOTÃO INTELIGENTE DE SALDO DENTRO DA ESTRATÉGIA */}
+                    <div className="mt-6 pt-6 border-t border-zinc-100 flex flex-col sm:flex-row justify-between items-center gap-4">
+                      <div>
+                        <p className="text-sm font-bold text-zinc-900">Precisa de saldo para rodar a campanha?</p>
+                        <p className="text-xs text-zinc-500">Adicione fundos via PIX diretamente no painel da Meta.</p>
+                      </div>
+                      <button 
+                        onClick={handleAdicionarSaldoMeta}
+                        disabled={!contaSelecionada}
+                        className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 font-bold py-2.5 px-4 rounded-xl text-sm transition-all flex items-center gap-2 whitespace-nowrap border border-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Wallet size={16}/> Adicionar Saldo na Meta <ExternalLink size={14}/>
+                      </button>
+                    </div>
+
                   </div>
                 </div>
 
@@ -614,7 +611,7 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
                   {/* AVISO DE SALDO ANTES DE PUBLICAR */}
                   <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mt-6 flex items-start gap-3">
                     <AlertTriangle size={18} className="text-amber-500 shrink-0 mt-0.5"/>
-                    <p className="text-xs text-amber-700 leading-relaxed font-medium">Lembre-se de verificar no <button onClick={handleAdicionarSaldoMeta} className="underline font-bold hover:text-amber-900">Gerenciador de Faturamento</button> se há saldo suficiente (PIX ou Cartão) na sua conta de anúncios para a campanha rodar sem interrupções.</p>
+                    <p className="text-xs text-amber-700 leading-relaxed font-medium">Verifique se você inseriu o <strong>saldo necessário</strong> na sua conta de anúncios para garantir que a campanha seja veiculada sem problemas.</p>
                   </div>
 
                   <button 
