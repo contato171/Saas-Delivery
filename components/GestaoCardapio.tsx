@@ -201,9 +201,7 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
     else carregarDados();
   };
 
-  // =================================================================
   // MOTOR MÁGICO DE IMPORTAÇÃO CSV
-  // =================================================================
   const baixarModeloCSV = () => {
     const header = "Nome do Produto;Descricao;Preco;Nome da Categoria\n";
     const exemplo = "X-Tudo Turbo;Pão, Carne, Queijo, Bacon, Ovo, Salada;35.90;Lanches\nRefrigerante Lata;Coca-Cola 350ml gelada;6.00;Bebidas";
@@ -264,7 +262,6 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
             }
           }
 
-          // AQUI FOI REMOVIDO O "active: true" QUE ESTAVA CAUSANDO O ERRO
           if (category_id) {
             produtosParaInserir.push({
               tenant_id: tenantId,
@@ -295,7 +292,14 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
 
     reader.readAsText(file);
   };
-  // =================================================================
+
+  // AGRUPAMENTO DE PRODUTOS PARA EXIBIÇÃO EM LISTA
+  const produtosAgrupados = produtos.reduce((acc, prod) => {
+    const catName = prod.categories?.name || "Geral";
+    if (!acc[catName]) acc[catName] = [];
+    acc[catName].push(prod);
+    return acc;
+  }, {} as Record<string, any[]>);
 
   if (loading) return <div className="py-20 flex justify-center text-indigo-600"><Loader2 className="animate-spin" size={32} /></div>;
 
@@ -339,6 +343,7 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
         <button onClick={() => setActiveTab("complementos")} className={`px-4 py-3 font-bold text-sm flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${activeTab === "complementos" ? "border-indigo-600 text-indigo-600" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}><Layers size={18}/> Complementos</button>
       </div>
 
+      {/* ABA CATEGORIAS */}
       {activeTab === "categorias" && (
         <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
           <div className="divide-y divide-zinc-100">
@@ -355,34 +360,57 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
         </div>
       )}
 
+      {/* ABA PRODUTOS (AGORA EM LISTA POR CATEGORIA) */}
       {activeTab === "produtos" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {produtos.length === 0 ? <p className="col-span-full py-10 text-center text-zinc-500 border-2 border-dashed border-zinc-200 rounded-2xl">Nenhum produto cadastrado. Adicione um novo ou importe via CSV.</p> : produtos.map(prod => (
-            <div key={prod.id} className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden flex flex-col group">
-              <div className="w-full h-40 bg-zinc-100 relative">
-                {prod.image_url ? <img src={prod.image_url} className="w-full h-full object-cover" alt={prod.name}/> : <div className="w-full h-full flex items-center justify-center text-zinc-300"><ImageIcon size={40}/></div>}
-                <div className="absolute top-2 right-2 bg-black/50 text-white text-[10px] font-bold px-2 py-1 rounded-md backdrop-blur-sm">
-                  {prod.categories?.name || "Sem Categoria"}
+        <div className="space-y-6">
+          {Object.keys(produtosAgrupados).length === 0 ? (
+            <p className="col-span-full py-10 text-center text-zinc-500 border-2 border-dashed border-zinc-200 rounded-2xl">Nenhum produto cadastrado. Adicione um novo ou importe via CSV.</p>
+          ) : (
+            Object.keys(produtosAgrupados).sort().map(categoria => (
+              <div key={categoria} className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
+                {/* Header da Categoria */}
+                <div className="bg-zinc-50/80 px-6 py-4 border-b border-zinc-200">
+                  <h3 className="font-black text-zinc-800 uppercase tracking-wider text-sm">{categoria}</h3>
+                </div>
+                
+                {/* Lista de Produtos desta categoria */}
+                <div className="divide-y divide-zinc-100">
+                  {produtosAgrupados[categoria].map(prod => (
+                    <div key={prod.id} className="flex flex-col sm:flex-row sm:items-center p-4 hover:bg-zinc-50 transition-colors gap-4">
+                      <div className="flex items-center flex-1 gap-4">
+                        <div className="w-16 h-16 bg-zinc-100 rounded-xl overflow-hidden shrink-0 border border-zinc-200">
+                          {prod.image_url ? (
+                            <img src={prod.image_url} className="w-full h-full object-cover" alt={prod.name}/>
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-zinc-300"><ImageIcon size={24}/></div>
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-bold text-zinc-900 line-clamp-1">{prod.name}</h4>
+                          <p className="text-xs text-zinc-500 line-clamp-1 mt-0.5">{prod.description || "Sem descrição"}</p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center justify-between sm:justify-end gap-6 sm:w-auto">
+                        <div className="text-left sm:text-right">
+                          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Preço</p>
+                          <span className="font-black text-indigo-600">R$ {Number(prod.price).toFixed(2).replace('.', ',')}</span>
+                        </div>
+                        <div className="flex gap-2 border-l border-zinc-100 pl-6">
+                          <button onClick={() => abrirModal("produtos", prod)} className="p-2.5 text-zinc-400 hover:text-indigo-600 bg-white rounded-lg border border-zinc-200 shadow-sm transition-colors"><Edit3 size={16}/></button>
+                          <button onClick={() => excluirItem(prod.id, "products")} className="p-2.5 text-zinc-400 hover:text-red-600 bg-white rounded-lg border border-zinc-200 shadow-sm transition-colors"><Trash2 size={16}/></button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-              <div className="p-4 flex-1 flex flex-col justify-between">
-                <div>
-                  <h3 className="font-bold text-zinc-900 line-clamp-1">{prod.name}</h3>
-                  <p className="text-sm text-zinc-500 line-clamp-2 mt-1">{prod.description || "Sem descrição."}</p>
-                </div>
-                <div className="mt-4 flex items-center justify-between">
-                  <p className="font-black text-indigo-600 text-lg">R$ {Number(prod.price).toFixed(2)}</p>
-                  <div className="flex gap-2">
-                    <button onClick={() => abrirModal("produtos", prod)} className="p-2 text-zinc-400 hover:text-blue-600 bg-zinc-50 rounded-lg"><Edit3 size={16}/></button>
-                    <button onClick={() => excluirItem(prod.id, "products")} className="p-2 text-zinc-400 hover:text-red-600 bg-zinc-50 rounded-lg"><Trash2 size={16}/></button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       )}
 
+      {/* ABA COMPLEMENTOS */}
       {activeTab === "complementos" && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {complementos.length === 0 ? <p className="col-span-full py-10 text-center text-zinc-500 border-2 border-dashed border-zinc-200 rounded-2xl">Nenhum complemento cadastrado.</p> : complementos.map(comp => (
@@ -404,6 +432,7 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
         </div>
       )}
 
+      {/* MODAL PADRÃO */}
       {modalOpen && (
         <div className="fixed inset-0 bg-zinc-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95">

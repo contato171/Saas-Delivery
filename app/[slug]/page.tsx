@@ -40,7 +40,6 @@ export default function VitrineLoja() {
     if (tenantData) {
       setTenant(tenantData);
       
-      // MÁGICA 1: Puxar o nome da categoria junto com os dados do produto
       const { data: produtosData } = await supabase
         .from("products")
         .select("*, categories(name)") 
@@ -65,19 +64,17 @@ export default function VitrineLoja() {
     (p.description && p.description.toLowerCase().includes(busca.toLowerCase()))
   );
 
-  let destaques = produtosFiltrados.filter(p => p.destaque);
-  if (destaques.length === 0) {
-    destaques = produtosFiltrados.slice(0, 4);
-  }
+  // MÁGICA 2: Destaques baseados em volume de vendas (ou os 5 primeiros se a loja for nova)
+  const destaques = [...produtosFiltrados]
+    .sort((a, b) => (b.total_vendas || 0) - (a.total_vendas || 0))
+    .slice(0, 5);
 
-  // MÁGICA 2: Agrupar usando o nome da categoria que veio do banco
   const categoriasUnicas = Array.from(new Set(produtosFiltrados.map(p => p.categories?.name || "Gerais")));
 
   return (
     <CartProvider tenantId={tenant.id}>
       <div className="min-h-screen bg-zinc-50 font-sans pb-20">
         
-        {/* HEADER: Capa e Logo (AGORA PUXANDO DO BANCO DE DADOS) */}
         <div className="w-full h-40 md:h-64 bg-zinc-200 relative">
           {tenant.cover_url && (
             <img src={tenant.cover_url} alt="Capa da Loja" className="w-full h-full object-cover" />
@@ -122,7 +119,7 @@ export default function VitrineLoja() {
 
           {destaques.length > 0 && busca === "" && (
             <div className="mb-12">
-              <h2 className="text-xl font-bold text-zinc-900 mb-4 tracking-tight">Destaques</h2>
+              <h2 className="text-xl font-bold text-zinc-900 mb-4 tracking-tight">Os Mais Pedidos 🔥</h2>
               <div className="flex overflow-x-auto gap-4 pb-4 snap-x hide-scrollbar">
                 {destaques.map((produto) => (
                   <div 
@@ -148,7 +145,6 @@ export default function VitrineLoja() {
 
           <div className="flex flex-col gap-10">
             {categoriasUnicas.map((categoria) => {
-              // MÁGICA 3: Filtrar usando o nome da categoria real
               const produtosDaCategoria = produtosFiltrados.filter(p => (p.categories?.name || "Gerais") === categoria);
               
               if (produtosDaCategoria.length === 0) return null;
