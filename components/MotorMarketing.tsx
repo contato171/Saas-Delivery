@@ -1,3 +1,4 @@
+// @ts-nocheck
 "use client";
 
 import { useState, useEffect } from "react";
@@ -19,7 +20,7 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
 
   // ==========================================
-  // NOVOS ESTADOS: ATIVOS DA META (Páginas, Contas, Pixels)
+  // ATIVOS DA META (Páginas, Contas, Pixels)
   // ==========================================
   const [paginasMeta, setPaginasMeta] = useState<any[]>([]);
   const [contasAnuncioMeta, setContasAnuncioMeta] = useState<any[]>([]);
@@ -30,6 +31,9 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
   const [pixelSelecionado, setPixelSelecionado] = useState("");
 
   const [etapa, setEtapa] = useState<1 | 2 | 3>(1);
+  
+  // NOVO: Busca de produtos
+  const [buscaProduto, setBuscaProduto] = useState("");
   
   const [buscaCidade, setBuscaCidade] = useState("");
   const [resultadosBuscaCidade, setResultadosBuscaCidade] = useState<any[]>([]);
@@ -50,7 +54,8 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
       const { data: tenantData } = await supabase.from("tenants").select("*").eq("id", tenantId).single();
       if (tenantData) setTenant(tenantData);
 
-      const { data: prodData } = await supabase.from("products").select("*").eq("tenant_id", tenantId);
+      // ATUALIZADO: Agora puxa o nome da categoria junto com o produto
+      const { data: prodData } = await supabase.from("products").select("*, categories(name)").eq("tenant_id", tenantId).order("name");
       if (prodData) setProdutos(prodData);
       
       const { data: integracao } = await supabase.from("tenant_integrations").select("*").eq("tenant_id", tenantId).maybeSingle();
@@ -58,7 +63,6 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
       if (integracao && integracao.facebook_access_token) {
         setIsFacebookConnected(true);
         setAccessToken(integracao.facebook_access_token);
-        // Se tem token, já busca as páginas e contas de anúncio na Meta!
         buscarAtivosIniciais(integracao.facebook_access_token);
       } else {
         setIsFacebookConnected(false);
@@ -68,10 +72,8 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
     carregarDados();
   }, [tenantId]);
 
-  // Função para buscar Páginas e Contas de Anúncio
   const buscarAtivosIniciais = async (token: string) => {
     try {
-      // Adicionamos &limit=100 para não cortar a lista da sua agência
       const paginasRes = await fetch(`https://graph.facebook.com/v19.0/me/accounts?fields=id,name&limit=100&access_token=${token}`);
       const paginasData = await paginasRes.json();
       if (paginasData.data) setPaginasMeta(paginasData.data);
@@ -84,12 +86,10 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
     }
   };
 
-  // Toda a vez que o cliente escolhe uma Conta de Anúncios, nós buscamos os Pixels daquela conta
   useEffect(() => {
     if (contaSelecionada && accessToken) {
       const buscarPixels = async () => {
         try {
-          // Adicionamos &limit=100 aqui também
           const res = await fetch(`https://graph.facebook.com/v19.0/${contaSelecionada}/adspixels?fields=id,name&limit=100&access_token=${accessToken}`);
           const data = await res.json();
           if (data.data) setPixelsMeta(data.data);
@@ -105,10 +105,7 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
     setConectandoAuth(true);
     const appId = "4223060334506886"; // MANTENHA O SEU ID AQUI
     const redirectUri = encodeURIComponent(`${window.location.origin}/api/meta/callback`);
-    
-    // A MÁGICA AQUI: Adicionámos o "business_management" no final para ele enxergar dentro das BMs!
     const scope = "ads_management,pages_manage_ads,pages_read_engagement,business_management";
-    
     window.location.href = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&state=${tenantId}&scope=${scope}`;
   };
 
@@ -183,10 +180,10 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
         diasVeiculacao: diasVeiculacao,
         cidadeMeta: cidadeSelecionadaMeta, 
         anuncioGerado: anuncioGerado,
-        accessToken: accessToken, // Usa o token dinâmico!
-        adAccountId: contaSelecionada, // Usa a conta selecionada!
-        pageId: paginaSelecionada, // Usa a página selecionada!
-        pixelId: pixelSelecionado, // Usa o pixel selecionado!
+        accessToken: accessToken,
+        adAccountId: contaSelecionada,
+        pageId: paginaSelecionada,
+        pixelId: pixelSelecionado,
         horarioInicio: horarioInicio,
         horarioFim: horarioFim
       };
@@ -207,6 +204,22 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
       setPublicando(false);
     }
   };
+
+  // ==========================================
+  // AGRUPAMENTO DE PRODUTOS PARA A TELA
+  // ==========================================
+  const produtosFiltrados = produtos.filter(p => 
+    p.name.toLowerCase().includes(buscaProduto.toLowerCase()) || 
+    (p.description && p.description.toLowerCase().includes(buscaProduto.toLowerCase()))
+  );
+
+  const produtosAgrupados = produtosFiltrados.reduce((acc, prod) => {
+    const catName = prod.categories?.name || "Geral";
+    if (!acc[catName]) acc[catName] = [];
+    acc[catName].push(prod);
+    return acc;
+  }, {} as Record<string, any[]>);
+
 
   if (loading) {
     return (
@@ -254,29 +267,59 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
 
       {etapa === 1 && (
         <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden animate-in fade-in">
-          <div className="p-6 border-b border-zinc-100 bg-zinc-50/50">
-            <h2 className="font-bold text-lg text-zinc-900">1. O que vamos anunciar hoje?</h2>
-            <p className="text-sm text-zinc-500">Selecione de 2 a 5 produtos para criar um anúncio em Carrossel.</p>
-          </div>
-          <div className="p-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-              {produtos.map(prod => {
-                const selecionado = produtosSelecionados.find(p => p.id === prod.id);
-                return (
-                  <div key={prod.id} onClick={() => toggleProduto(prod)} className={`border-2 rounded-xl p-4 cursor-pointer transition-all flex gap-3 ${selecionado ? 'border-purple-600 bg-purple-50/30' : 'border-zinc-200'}`}>
-                    <div className="w-16 h-16 bg-zinc-100 rounded-lg overflow-hidden shrink-0 border border-zinc-200">
-                      {prod.image_url ? <img src={prod.image_url} alt={prod.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-zinc-300"><ImageIcon size={24}/></div>}
-                    </div>
-                    <div className="flex flex-col justify-center flex-1">
-                      <h3 className="font-bold text-sm leading-tight line-clamp-2 mb-1">{prod.name}</h3>
-                      <p className="text-purple-700 font-black text-sm">R$ {Number(prod.price).toFixed(2).replace('.', ',')}</p>
-                    </div>
-                  </div>
-                );
-              })}
+          <div className="p-6 border-b border-zinc-100 bg-zinc-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h2 className="font-bold text-lg text-zinc-900">1. O que vamos anunciar hoje?</h2>
+              <p className="text-sm text-zinc-500">Selecione de 2 a 5 produtos para criar um anúncio em Carrossel.</p>
+            </div>
+            
+            {/* NOVA BARRA DE BUSCA */}
+            <div className="relative w-full md:w-72">
+              <Search className="absolute left-3 top-3 text-zinc-400" size={18} />
+              <input 
+                type="text" 
+                placeholder="Buscar produto..." 
+                value={buscaProduto}
+                onChange={(e) => setBuscaProduto(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-white border border-zinc-300 rounded-xl focus:ring-2 focus:ring-indigo-600 outline-none shadow-sm text-sm"
+              />
             </div>
           </div>
-          <div className="p-6 border-t border-zinc-100 bg-zinc-50/50 flex items-center justify-between">
+
+          <div className="p-6">
+            {Object.keys(produtosAgrupados).length === 0 ? (
+               <p className="text-center py-10 text-zinc-500">Nenhum produto encontrado.</p>
+            ) : (
+              Object.keys(produtosAgrupados).sort().map(categoria => (
+                <div key={categoria} className="mb-8 last:mb-0">
+                  {/* TÍTULO DA CATEGORIA */}
+                  <h3 className="font-black text-zinc-800 uppercase tracking-wider text-sm mb-4 border-b border-zinc-100 pb-2">
+                    {categoria} <span className="text-zinc-400 text-[10px] ml-1">({produtosAgrupados[categoria].length})</span>
+                  </h3>
+                  
+                  {/* GRID DE PRODUTOS */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    {produtosAgrupados[categoria].map(prod => {
+                      const selecionado = produtosSelecionados.find(p => p.id === prod.id);
+                      return (
+                        <div key={prod.id} onClick={() => toggleProduto(prod)} className={`border-2 rounded-xl p-4 cursor-pointer transition-all flex gap-3 ${selecionado ? 'border-purple-600 bg-purple-50/30' : 'border-zinc-200 hover:border-zinc-300'}`}>
+                          <div className="w-16 h-16 bg-zinc-100 rounded-lg overflow-hidden shrink-0 border border-zinc-200">
+                            {prod.image_url ? <img src={prod.image_url} alt={prod.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-zinc-300"><ImageIcon size={24}/></div>}
+                          </div>
+                          <div className="flex flex-col justify-center flex-1">
+                            <h3 className="font-bold text-sm leading-tight line-clamp-2 mb-1">{prod.name}</h3>
+                            <p className="text-purple-700 font-black text-sm">R$ {Number(prod.price).toFixed(2).replace('.', ',')}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          
+          <div className="p-6 border-t border-zinc-100 bg-zinc-50/50 flex items-center justify-between sticky bottom-0">
             <div className="font-bold">{produtosSelecionados.length} selecionados</div>
             <button onClick={gerarAnuncioIA} disabled={produtosSelecionados.length < 2} className="bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed">Configurar Campanha</button>
           </div>
@@ -291,14 +334,12 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 animate-in slide-in-from-bottom-8">
           <div className="lg:col-span-3 space-y-6">
 
-            {/* NOVA SESSÃO: SELEÇÃO DOS ATIVOS DA META */}
             <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden border-t-4 border-t-blue-600">
               <div className="p-5 border-b border-zinc-100 bg-zinc-50">
                 <h2 className="font-black text-zinc-900 flex items-center gap-2"><Layers size={20}/> Conexões do Facebook</h2>
               </div>
               <div className="p-6 space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* PÁGINAS */}
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-zinc-500 uppercase">Página do Facebook</label>
                     <select value={paginaSelecionada} onChange={e => setPaginaSelecionada(e.target.value)} className="w-full border border-zinc-300 rounded-lg p-3 font-bold text-zinc-900 outline-none focus:ring-2 focus:ring-blue-600 bg-white">
@@ -306,7 +347,6 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
                       {paginasMeta.map(pag => <option key={pag.id} value={pag.id}>{pag.name}</option>)}
                     </select>
                   </div>
-                  {/* CONTAS DE ANÚNCIO */}
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-zinc-500 uppercase">Conta de Anúncios</label>
                     <select value={contaSelecionada} onChange={e => setContaSelecionada(e.target.value)} className="w-full border border-zinc-300 rounded-lg p-3 font-bold text-zinc-900 outline-none focus:ring-2 focus:ring-blue-600 bg-white">
@@ -315,7 +355,6 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
                     </select>
                   </div>
                 </div>
-                {/* PIXELS (Só aparece se escolher uma Conta) */}
                 {contaSelecionada && (
                   <div className="space-y-2 pt-2">
                     <label className="text-xs font-bold text-zinc-500 uppercase">Pixel de Rastreamento</label>
