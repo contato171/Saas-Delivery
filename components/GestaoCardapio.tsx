@@ -208,7 +208,6 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
     const header = "Nome do Produto;Descricao;Preco;Nome da Categoria\n";
     const exemplo = "X-Tudo Turbo;Pão, Carne, Queijo, Bacon, Ovo, Salada;35.90;Lanches\nRefrigerante Lata;Coca-Cola 350ml gelada;6.00;Bebidas";
     
-    // Força o Excel a entender acentos com o prefixo \uFEFF
     const blob = new Blob(["\uFEFF" + header + exemplo], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -229,12 +228,10 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
     reader.onload = async (event) => {
       try {
         const text = event.target?.result as string;
-        // Pula o cabeçalho e divide as linhas
         const linhas = text.split('\n').slice(1).filter(l => l.trim() !== '');
         
-        let novasCategorias: Record<string, string> = {}; // { "Nome da Categoria": "id_da_categoria" }
+        let novasCategorias: Record<string, string> = {}; 
         
-        // Puxa as categorias que já existem para não duplicar
         categorias.forEach(cat => {
           novasCategorias[cat.name.toLowerCase().trim()] = cat.id;
         });
@@ -242,7 +239,6 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
         const produtosParaInserir = [];
 
         for (const linha of linhas) {
-          // Lê separado por ponto e vírgula
           const colunas = linha.split(';').map(col => col.trim().replace(/^"|"$/g, ''));
           if (colunas.length < 4) continue;
 
@@ -256,11 +252,10 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
           const catNormalizada = nomeCategoria.toLowerCase().trim();
           let category_id = novasCategorias[catNormalizada];
 
-          // Se a categoria não existe no banco, cria ela agora magicamente
           if (!category_id) {
             const { data: novaCat, error: errCat } = await supabase.from('categories').insert([{
               tenant_id: tenantId,
-              name: nomeCategoria // Nome original com maiúsculas
+              name: nomeCategoria 
             }]).select().single();
 
             if (!errCat && novaCat) {
@@ -269,14 +264,14 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
             }
           }
 
+          // AQUI FOI REMOVIDO O "active: true" QUE ESTAVA CAUSANDO O ERRO
           if (category_id) {
             produtosParaInserir.push({
               tenant_id: tenantId,
               name: nome,
               description: descricao,
               price: preco,
-              category_id: category_id,
-              active: true
+              category_id: category_id
             });
           }
         }
@@ -285,7 +280,7 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
           const { error } = await supabase.from('products').insert(produtosParaInserir);
           if (error) throw error;
           alert(`${produtosParaInserir.length} produtos importados com sucesso!`);
-          await carregarDados(); // Recarrega a tela
+          await carregarDados(); 
         } else {
           alert("Nenhum produto válido encontrado na planilha. Verifique o formato.");
         }
@@ -294,7 +289,7 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
         alert("Erro ao importar a planilha: " + error.message);
       } finally {
         setImportando(false);
-        if (fileInputRef.current) fileInputRef.current.value = ""; // Limpa o input
+        if (fileInputRef.current) fileInputRef.current.value = ""; 
       }
     };
 
