@@ -7,7 +7,7 @@ import {
   Wand2, Target, Megaphone, Facebook, 
   CheckCircle2, Loader2, Image as ImageIcon,
   Clock, MapPin, Edit3, DollarSign, Search, Layers, ChevronDown, ChevronUp,
-  ImagePlay, Film, UploadCloud, Wallet, ExternalLink, AlertTriangle, Crosshair
+  ImagePlay, Film, UploadCloud, Wallet, ExternalLink, AlertTriangle
 } from "lucide-react";
 
 export default function MotorMarketing({ tenantId }: { tenantId: string }) {
@@ -30,12 +30,7 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
   const [paginaSelecionada, setPaginaSelecionada] = useState("");
   const [contaSelecionada, setContaSelecionada] = useState("");
   const [pixelSelecionado, setPixelSelecionado] = useState("");
-
-  // ESTADOS DO PIXELL DA VITRINE (GLOBAL)
-  const [contaGlobalSelecionada, setContaGlobalSelecionada] = useState("");
-  const [pixelGlobalSelecionado, setPixelGlobalSelecionado] = useState("");
-  const [salvandoPixelGlobal, setSalvandoPixelGlobal] = useState(false);
-  const [sucessoPixel, setSucessoPixel] = useState(false);
+  const [salvandoPixel, setSalvandoPixel] = useState(false); // Feedback visual pro lojista
 
   const [etapa, setEtapa] = useState<1 | 2 | 3>(1);
   const [tipoAnuncio, setTipoAnuncio] = useState<"single" | "carousel">("single");
@@ -69,10 +64,7 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
   useEffect(() => {
     async function carregarDados() {
       const { data: tenantData } = await supabase.from("tenants").select("*").eq("id", tenantId).single();
-      if (tenantData) {
-        setTenant(tenantData);
-        if (tenantData.meta_pixel_id) setPixelGlobalSelecionado(tenantData.meta_pixel_id);
-      }
+      if (tenantData) setTenant(tenantData);
 
       const { data: prodData } = await supabase.from("products").select("*, categories(name)").eq("tenant_id", tenantId).order("name");
       if (prodData) setProdutos(prodData);
@@ -105,43 +97,41 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
     }
   };
 
-  // Carrega pixels para a Criação de Anúncio
   useEffect(() => {
     if (contaSelecionada && accessToken) {
       const buscarPixels = async () => {
         try {
           const res = await fetch(`https://graph.facebook.com/v19.0/${contaSelecionada}/adspixels?fields=id,name&limit=100&access_token=${accessToken}`);
           const data = await res.json();
-          if (data.data) setPixelsMeta(data.data);
+          if (data.data) {
+            setPixelsMeta(data.data);
+            // Se ele já tinha um pixel salvo no banco, auto-seleciona ele na lista
+            if (tenant?.meta_pixel_id) {
+              const pixelExiste = data.data.find((p: any) => p.id === tenant.meta_pixel_id);
+              if (pixelExiste) setPixelSelecionado(tenant.meta_pixel_id);
+            }
+          }
         } catch (error) {}
       };
       buscarPixels();
     }
-  }, [contaSelecionada, accessToken]);
+  }, [contaSelecionada, accessToken, tenant]);
 
-  // Carrega pixels para a Configuração GLOBAL da Vitrine
-  const carregarPixelsGlobais = async (accountId: string) => {
-    setContaGlobalSelecionada(accountId);
-    if (!accountId || !accessToken) return;
-    try {
-      const res = await fetch(`https://graph.facebook.com/v19.0/${accountId}/adspixels?fields=id,name&limit=100&access_token=${accessToken}`);
-      const data = await res.json();
-      if (data.data) setPixelsMeta(data.data); // Reusa o mesmo estado de pixels
-    } catch (error) {}
-  };
+  // =========================================================
+  // MÁGICA: AUTO-SAVE DO PIXEL NA VITRINE
+  // =========================================================
+  const handleSelecionarPixel = async (pixelId: string) => {
+    setPixelSelecionado(pixelId);
+    if (!pixelId) return;
 
-  const salvarPixelGlobal = async () => {
-    if (!pixelGlobalSelecionado) return alert("Selecione um pixel primeiro!");
-    setSalvandoPixelGlobal(true);
-    const { error } = await supabase.from("tenants").update({ meta_pixel_id: pixelGlobalSelecionado }).eq("id", tenantId);
-    setSalvandoPixelGlobal(false);
+    setSalvandoPixel(true);
+    // Atualiza direto na tabela tenants para a vitrine ler
+    const { error } = await supabase.from("tenants").update({ meta_pixel_id: pixelId }).eq("id", tenantId);
     
-    if (error) {
-      alert("Erro ao salvar Pixel.");
-    } else {
-      setSucessoPixel(true);
-      setTimeout(() => setSucessoPixel(false), 3000);
+    if (!error) {
+      setTenant({ ...tenant, meta_pixel_id: pixelId });
     }
+    setSalvandoPixel(false);
   };
 
   const handleConectarFacebook = () => {
@@ -153,12 +143,11 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
   };
 
   const handleAdicionarSaldoMeta = () => {
-    const contaUsada = contaSelecionada || contaGlobalSelecionada;
-    if (!contaUsada) {
-      alert("Por favor, selecione primeiro a sua Conta de Anúncios!");
+    if (!contaSelecionada) {
+      alert("Por favor, selecione primeiro a sua Conta de Anúncios na seção acima!");
       return;
     }
-    const actId = contaUsada.replace("act_", "");
+    const actId = contaSelecionada.replace("act_", "");
     const linkFaturamento = `https://business.facebook.com/billing_hub/accounts/details?asset_id=${actId}`;
     window.open(linkFaturamento, "_blank");
   };
@@ -314,7 +303,7 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px]">
         <Loader2 className="animate-spin text-indigo-600 mb-4" size={40} />
-        <p className="text-zinc-500 font-bold">Carregando seus produtos e conexões...</p>
+        <p className="text-zinc-500 font-bold">Verificando conexões...</p>
       </div>
     );
   }
@@ -322,7 +311,7 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
   return (
     <div className="space-y-6 text-zinc-900 font-sans pb-20 animate-in fade-in">
       
-      {/* HEADER DA TELA */}
+      {/* HEADER DA TELA E ACESSO AO SALDO DA META */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
           <h1 className="text-3xl font-black tracking-tight flex items-center gap-3">
@@ -332,6 +321,7 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
           <p className="text-zinc-500 mt-1">Crie anúncios automáticos que vendem enquanto você dorme.</p>
         </div>
 
+        {/* BOTÃO INTELIGENTE DE SALDO */}
         {isFacebookConnected && accessToken && (
           <div className="bg-white border border-zinc-200 shadow-sm rounded-2xl p-4 flex items-center gap-6 w-full md:w-auto">
             <div>
@@ -350,7 +340,7 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
         )}
       </div>
 
-      {/* BLOCO DE CONEXÃO COM O FACEBOOK */}
+      {/* BLOCO DE CONEXÃO COM O FACEBOOK SE AINDA NÃO TIVER FEITO */}
       {!isFacebookConnected && !accessToken ? (
         <div className="bg-white max-w-3xl mx-auto rounded-2xl border border-zinc-200 shadow-sm p-10 text-center animate-in zoom-in-95 mt-10">
           <Facebook size={48} className="mx-auto text-[#1877F2] mb-6" />
@@ -364,54 +354,11 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
         <div className="bg-white rounded-2xl border border-zinc-200 p-10 text-center animate-in zoom-in-95 shadow-sm mt-10">
           <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 size={40} /></div>
           <h2 className="text-2xl font-black text-zinc-900 mb-2">Campanha Lançada! 🚀</h2>
-          <p className="text-zinc-500 max-w-md mx-auto mb-8">O seu anúncio já está no Gerenciador da Meta pronto para vender.</p>
+          <p className="text-zinc-500 max-w-md mx-auto mb-8">O seu anúncio já está no Gerenciador da Meta pronto para vender. O valor foi debitado da sua carteira.</p>
           <button onClick={() => { setEtapa(1); setPublicadoSucesso(false); setProdutosSelecionados([]); setCidadeSelecionadaMeta(null); setMidiaUpload(null); setMidiaPreview(null); }} className="bg-zinc-900 text-white font-bold py-3 px-8 rounded-xl transition-colors">Criar Nova Campanha</button>
         </div>
       ) : (
         <>
-          {/* NOVA SEÇÃO: CONFIGURAÇÃO GLOBAL DO PIXEL (Apenas visível na Etapa 1 para não poluir) */}
-          {etapa === 1 && (
-            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-6 shadow-sm mb-8 flex flex-col md:flex-row gap-6 items-center">
-              <div className="flex-1">
-                <h3 className="font-black text-indigo-900 text-lg flex items-center gap-2"><Crosshair size={20}/> Rastreamento da Vitrine (Pixel)</h3>
-                <p className="text-sm text-indigo-700 mt-1">Selecione o Pixel que ficará ativo na sua loja para rastrear visitas, carrinhos e compras. A nossa Inteligência vai otimizar seus anúncios baseada nesses dados.</p>
-              </div>
-              <div className="w-full md:w-auto flex flex-col gap-3 min-w-[300px]">
-                <select 
-                  value={contaGlobalSelecionada} 
-                  onChange={e => carregarPixelsGlobais(e.target.value)} 
-                  className="w-full border border-indigo-200 rounded-lg p-2.5 text-sm font-bold text-indigo-900 bg-white outline-none focus:ring-2 focus:ring-indigo-600"
-                >
-                  <option value="">1º. Selecione a Conta de Anúncio...</option>
-                  {contasAnuncioMeta.map(conta => <option key={conta.id} value={conta.id}>{conta.name}</option>)}
-                </select>
-
-                <div className="flex gap-2">
-                  <select 
-                    value={pixelGlobalSelecionado} 
-                    onChange={e => setPixelGlobalSelecionado(e.target.value)} 
-                    disabled={!contaGlobalSelecionada || pixelsMeta.length === 0}
-                    className="flex-1 border border-indigo-200 rounded-lg p-2.5 text-sm font-bold text-indigo-900 bg-white outline-none focus:ring-2 focus:ring-indigo-600 disabled:opacity-60"
-                  >
-                    <option value="">2º. Escolha o Pixel...</option>
-                    {pixelsMeta.map(pixel => <option key={pixel.id} value={pixel.id}>{pixel.name} (Ativo)</option>)}
-                  </select>
-                  
-                  <button 
-                    onClick={salvarPixelGlobal}
-                    disabled={!pixelGlobalSelecionado || salvandoPixelGlobal}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 rounded-lg disabled:opacity-50 transition-colors flex items-center justify-center shrink-0 shadow-sm"
-                  >
-                    {salvandoPixelGlobal ? <Loader2 size={16} className="animate-spin"/> : sucessoPixel ? <CheckCircle2 size={16}/> : "Salvar"}
-                  </button>
-                </div>
-                {sucessoPixel && <span className="text-xs font-bold text-emerald-600 text-right">Pixel instalado na vitrine! ✅</span>}
-                {tenant?.meta_pixel_id && !sucessoPixel && <span className="text-xs font-bold text-indigo-600 text-right">Pixel atual: {tenant.meta_pixel_id}</span>}
-              </div>
-            </div>
-          )}
-
-          {/* O RESTO DO COMPONENTE CONTINUA IGUAL */}
           {etapa === 1 && (
             <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden animate-in fade-in">
               <div className="p-6 border-b border-zinc-100 bg-zinc-50/50 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -452,7 +399,7 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
                   <div className="bg-indigo-50 border border-indigo-200 p-6 rounded-2xl animate-in slide-in-from-top-4 flex flex-col md:flex-row items-center gap-6">
                     <div className="flex-1">
                       <h3 className="font-black text-indigo-900 text-lg flex items-center gap-2"><Film size={20}/> Subir Mídia de Alta Conversão</h3>
-                      <p className="text-sm text-indigo-700 mt-1 mb-4">Por padrão, usaremos a foto do cardápio do <strong>{produtosSelecionados[0].name}</strong>. Mas se você tiver um vídeo Reels ou arte, suba aqui! Vídeos chamam 3x mais atenção.</p>
+                      <p className="text-sm text-indigo-700 mt-1 mb-4">Por padrão, usaremos a foto do cardápio do <strong>{produtosSelecionados[0].name}</strong>. Mas se você tiver um vídeo Reels mostrando o produto, ou uma arte pronta, suba aqui! Vídeos chamam 3x mais atenção.</p>
                       
                       <label className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-3 rounded-xl cursor-pointer transition-colors shadow-md">
                         <UploadCloud size={20}/>
@@ -560,15 +507,23 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
                     </div>
                     {contaSelecionada && (
                       <div className="space-y-2 pt-2">
-                        <label className="text-xs font-bold text-zinc-500 uppercase">Pixel de Rastreamento</label>
-                        <select value={pixelSelecionado} onChange={e => setPixelSelecionado(e.target.value)} className="w-full border border-zinc-300 rounded-lg p-3 font-bold text-zinc-900 outline-none focus:ring-2 focus:ring-blue-600 bg-white">
-                          <option value="">Selecione um Pixel...</option>
+                        <label className="text-xs font-bold text-zinc-500 uppercase">Pixel de Rastreamento da Loja</label>
+                        <select 
+                          value={pixelSelecionado} 
+                          onChange={e => handleSelecionarPixel(e.target.value)} 
+                          className="w-full border border-zinc-300 rounded-lg p-3 font-bold text-zinc-900 outline-none focus:ring-2 focus:ring-blue-600 bg-white"
+                        >
+                          <option value="">Selecione o Pixel para rastrear vendas...</option>
                           {pixelsMeta.length === 0 ? (
                             <option disabled>Nenhum pixel encontrado nesta conta.</option>
                           ) : (
                             pixelsMeta.map(pixel => <option key={pixel.id} value={pixel.id}>{pixel.name}</option>)
                           )}
                         </select>
+                        <div className="flex items-center gap-2 mt-1 min-h-[20px]">
+                           {salvandoPixel ? <span className="text-xs text-zinc-500 flex items-center gap-1"><Loader2 size={12} className="animate-spin"/> Salvando pixel na vitrine...</span> : 
+                            pixelSelecionado === tenant?.meta_pixel_id ? <span className="text-xs text-emerald-600 font-bold flex items-center gap-1"><CheckCircle2 size={12}/> Pixel ativo na vitrine.</span> : null}
+                        </div>
                       </div>
                     )}
                   </div>
