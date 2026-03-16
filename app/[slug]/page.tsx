@@ -19,7 +19,6 @@ export default function VitrineLoja() {
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
   
-  // O cérebro da tela: controla o que abre e fecha
   const [produtoSelecionado, setProdutoSelecionado] = useState<any>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
@@ -40,11 +39,13 @@ export default function VitrineLoja() {
 
     if (tenantData) {
       setTenant(tenantData);
+      
+      // MÁGICA 1: Puxar o nome da categoria junto com os dados do produto
       const { data: produtosData } = await supabase
         .from("products")
-        .select("*")
+        .select("*, categories(name)") 
         .eq("tenant_id", tenantData.id)
-        .order("total_vendas", { ascending: false });
+        .order("name", { ascending: true }); 
 
       setProdutos(produtosData || []);
     }
@@ -69,21 +70,29 @@ export default function VitrineLoja() {
     destaques = produtosFiltrados.slice(0, 4);
   }
 
-  const categoriasUnicas = Array.from(new Set(produtosFiltrados.map(p => p.categoria || "Gerais")));
+  // MÁGICA 2: Agrupar usando o nome da categoria que veio do banco
+  const categoriasUnicas = Array.from(new Set(produtosFiltrados.map(p => p.categories?.name || "Gerais")));
 
   return (
     <CartProvider tenantId={tenant.id}>
       <div className="min-h-screen bg-zinc-50 font-sans pb-20">
         
-        {/* HEADER: Capa e Logo */}
+        {/* HEADER: Capa e Logo (AGORA PUXANDO DO BANCO DE DADOS) */}
         <div className="w-full h-40 md:h-64 bg-zinc-200 relative">
+          {tenant.cover_url && (
+            <img src={tenant.cover_url} alt="Capa da Loja" className="w-full h-full object-cover" />
+          )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
         </div>
         
         <div className="max-w-5xl mx-auto px-4 sm:px-6 relative -mt-12 md:-mt-16">
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-zinc-100 flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
             <div className="w-24 h-24 md:w-32 md:h-32 bg-zinc-100 rounded-full border-4 border-white shadow-md flex items-center justify-center text-3xl shrink-0 overflow-hidden">
-              <span className="font-black text-zinc-400">{tenant.name.charAt(0)}</span>
+              {tenant.logo_url ? (
+                <img src={tenant.logo_url} alt="Logo" className="w-full h-full object-cover" />
+              ) : (
+                <span className="font-black text-zinc-400">{tenant.name.charAt(0)}</span>
+              )}
             </div>
             <div className="text-center sm:text-left pt-2 md:pt-6 flex-1">
               <h1 className="text-2xl md:text-3xl font-bold text-zinc-900">{tenant.name}</h1>
@@ -139,13 +148,14 @@ export default function VitrineLoja() {
 
           <div className="flex flex-col gap-10">
             {categoriasUnicas.map((categoria) => {
-              const produtosDaCategoria = produtosFiltrados.filter(p => (p.categoria || "Gerais") === categoria);
+              // MÁGICA 3: Filtrar usando o nome da categoria real
+              const produtosDaCategoria = produtosFiltrados.filter(p => (p.categories?.name || "Gerais") === categoria);
               
               if (produtosDaCategoria.length === 0) return null;
 
               return (
-                <div key={categoria}>
-                  <h2 className="text-xl font-bold text-zinc-900 mb-4 tracking-tight">{categoria}</h2>
+                <div key={categoria as string}>
+                  <h2 className="text-xl font-bold text-zinc-900 mb-4 tracking-tight">{categoria as string}</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {produtosDaCategoria.map((produto) => (
                       <div 
@@ -174,9 +184,6 @@ export default function VitrineLoja() {
           </div>
         </div>
 
-        {/* MODAIS: A ordem correta e conectada */}
-        
-        {/* 1. Modal do Produto */}
         {produtoSelecionado && (
           <ModalProduto
             produto={produtoSelecionado}
@@ -185,10 +192,10 @@ export default function VitrineLoja() {
           />
         )}
 
-        {/* 2. O Flutuante manda a ordem para abrir a sacola lateral */}
-        <CarrinhoFlutuante onClick={() => setIsCartOpen(true)} />
+        <div onClick={() => setIsCartOpen(true)}>
+          <CarrinhoFlutuante onClick={() => setIsCartOpen(true)} />
+        </div>
 
-        {/* 3. A Sacola Lateral fecha a si mesma e manda a ordem para abrir o checkout */}
         {isCartOpen && (
           <CarrinhoLateral 
             tenant={tenant} 
@@ -200,7 +207,6 @@ export default function VitrineLoja() {
           />
         )}
 
-        {/* 4. O Checkout finaliza a compra */}
         {isCheckoutOpen && (
           <CheckoutModal 
             onClose={() => setIsCheckoutOpen(false)} 
