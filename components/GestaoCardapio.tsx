@@ -6,7 +6,7 @@ import { supabase } from "../lib/supabase";
 import { 
   Plus, Edit3, Trash2, Image as ImageIcon, 
   Loader2, CheckCircle2, X, UploadCloud, LayoutList, Package, Layers,
-  FileSpreadsheet, Download
+  FileSpreadsheet, Download, Search, ChevronDown, ChevronUp
 } from "lucide-react";
 
 export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
@@ -30,16 +30,21 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
   
   const [produtosSelecionadosComp, setProdutosSelecionadosComp] = useState<string[]>([]);
 
-  // ESTADOS DE IMPORTAÇÃO CSV
+  // ESTADOS DE IMPORTAÇÃO CSV E BUSCA
   const [importando, setImportando] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [buscaProduto, setBuscaProduto] = useState("");
+  
+  // Estado para controlar quais categorias estão recolhidas
+  const [categoriasOcultas, setCategoriasOcultas] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    carregarDados();
+    carregarDados(true);
   }, [tenantId]);
 
-  async function carregarDados() {
-    setLoading(true);
+  // A variável showLoader evita que a página pisque e perca o scroll ao salvar
+  async function carregarDados(showLoader = false) {
+    if (showLoader) setLoading(true);
     const [catRes, prodRes, compRes] = await Promise.all([
       supabase.from("categories").select("*").eq("tenant_id", tenantId).order("name"),
       supabase.from("products").select("*, categories(name)").eq("tenant_id", tenantId).order("name"),
@@ -49,7 +54,7 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
     if (catRes.data) setCategorias(catRes.data);
     if (prodRes.data) setProdutos(prodRes.data);
     if (compRes.data) setComplementos(compRes.data);
-    setLoading(false);
+    if (showLoader) setLoading(false);
   }
 
   const abrirModal = (tipo: string, item: any = null) => {
@@ -114,6 +119,13 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
     } else {
       setProdutosSelecionadosComp(produtos.map(p => p.id));
     }
+  };
+
+  const toggleCategoriaVisivel = (categoriaNome: string) => {
+    setCategoriasOcultas(prev => ({
+      ...prev,
+      [categoriaNome]: !prev[categoriaNome]
+    }));
   };
 
   const salvarItem = async () => {
@@ -184,7 +196,8 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
         }
       }
 
-      await carregarDados();
+      // Chama sem o loader para preservar o scroll!
+      await carregarDados(false);
       fecharModal();
     } catch (error: any) {
       console.error(error);
@@ -198,10 +211,9 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
     if (!confirm("Tem a certeza que deseja excluir? Esta ação não pode ser desfeita.")) return;
     const { error } = await supabase.from(table).delete().eq("id", id);
     if (error) alert("Erro ao excluir: " + error.message);
-    else carregarDados();
+    else carregarDados(false); // Atualiza em background sem pular pro topo
   };
 
-  // MOTOR MÁGICO DE IMPORTAÇÃO CSV
   const baixarModeloCSV = () => {
     const header = "Nome do Produto;Descricao;Preco;Nome da Categoria\n";
     const exemplo = "X-Tudo Turbo;Pão, Carne, Queijo, Bacon, Ovo, Salada;35.90;Lanches\nRefrigerante Lata;Coca-Cola 350ml gelada;6.00;Bebidas";
@@ -277,7 +289,7 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
           const { error } = await supabase.from('products').insert(produtosParaInserir);
           if (error) throw error;
           alert(`${produtosParaInserir.length} produtos importados com sucesso!`);
-          await carregarDados(); 
+          await carregarDados(false); 
         } else {
           alert("Nenhum produto válido encontrado na planilha. Verifique o formato.");
         }
@@ -293,8 +305,13 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
     reader.readAsText(file);
   };
 
-  // AGRUPAMENTO DE PRODUTOS PARA EXIBIÇÃO EM LISTA
-  const produtosAgrupados = produtos.reduce((acc, prod) => {
+  // Filtrar e agrupar produtos
+  const produtosFiltrados = produtos.filter(p => 
+    p.name.toLowerCase().includes(buscaProduto.toLowerCase()) || 
+    (p.description && p.description.toLowerCase().includes(buscaProduto.toLowerCase()))
+  );
+
+  const produtosAgrupados = produtosFiltrados.reduce((acc, prod) => {
     const catName = prod.categories?.name || "Geral";
     if (!acc[catName]) acc[catName] = [];
     acc[catName].push(prod);
@@ -343,7 +360,6 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
         <button onClick={() => setActiveTab("complementos")} className={`px-4 py-3 font-bold text-sm flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${activeTab === "complementos" ? "border-indigo-600 text-indigo-600" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}><Layers size={18}/> Complementos</button>
       </div>
 
-      {/* ABA CATEGORIAS */}
       {activeTab === "categorias" && (
         <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
           <div className="divide-y divide-zinc-100">
@@ -360,52 +376,77 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
         </div>
       )}
 
-      {/* ABA PRODUTOS (AGORA EM LISTA POR CATEGORIA) */}
       {activeTab === "produtos" && (
         <div className="space-y-6">
+          {/* BARRA DE BUSCA */}
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-3 text-zinc-400" size={18} />
+            <input 
+              type="text" 
+              placeholder="Buscar pelo nome ou descrição..." 
+              value={buscaProduto}
+              onChange={(e) => setBuscaProduto(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-white border border-zinc-300 rounded-xl focus:ring-2 focus:ring-indigo-600 outline-none shadow-sm text-sm"
+            />
+          </div>
+
           {Object.keys(produtosAgrupados).length === 0 ? (
-            <p className="col-span-full py-10 text-center text-zinc-500 border-2 border-dashed border-zinc-200 rounded-2xl">Nenhum produto cadastrado. Adicione um novo ou importe via CSV.</p>
+            <p className="col-span-full py-10 text-center text-zinc-500 border-2 border-dashed border-zinc-200 rounded-2xl">Nenhum produto encontrado.</p>
           ) : (
-            Object.keys(produtosAgrupados).sort().map(categoria => (
-              <div key={categoria} className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
-                {/* Header da Categoria */}
-                <div className="bg-zinc-50/80 px-6 py-4 border-b border-zinc-200">
-                  <h3 className="font-black text-zinc-800 uppercase tracking-wider text-sm">{categoria}</h3>
-                </div>
-                
-                {/* Lista de Produtos desta categoria */}
-                <div className="divide-y divide-zinc-100">
-                  {produtosAgrupados[categoria].map(prod => (
-                    <div key={prod.id} className="flex flex-col sm:flex-row sm:items-center p-4 hover:bg-zinc-50 transition-colors gap-4">
-                      <div className="flex items-center flex-1 gap-4">
-                        <div className="w-16 h-16 bg-zinc-100 rounded-xl overflow-hidden shrink-0 border border-zinc-200">
-                          {prod.image_url ? (
-                            <img src={prod.image_url} className="w-full h-full object-cover" alt={prod.name}/>
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-zinc-300"><ImageIcon size={24}/></div>
-                          )}
+            Object.keys(produtosAgrupados).sort().map(categoria => {
+              const estaOculto = categoriasOcultas[categoria];
+              
+              return (
+                <div key={categoria} className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden transition-all">
+                  {/* Header da Categoria - CLICÁVEL (Sanfona) */}
+                  <div 
+                    onClick={() => toggleCategoriaVisivel(categoria)}
+                    className="bg-zinc-50/80 px-6 py-4 border-b border-zinc-200 flex justify-between items-center cursor-pointer hover:bg-zinc-100 transition-colors"
+                  >
+                    <h3 className="font-black text-zinc-800 uppercase tracking-wider text-sm flex items-center gap-2">
+                      {categoria} <span className="bg-zinc-200 text-zinc-600 text-[10px] px-2 py-0.5 rounded-full">{produtosAgrupados[categoria].length}</span>
+                    </h3>
+                    <button className="text-zinc-500">
+                      {estaOculto ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
+                    </button>
+                  </div>
+                  
+                  {/* Lista de Produtos (Só aparece se NÃO estiver oculto) */}
+                  {!estaOculto && (
+                    <div className="divide-y divide-zinc-100 animate-in slide-in-from-top-2">
+                      {produtosAgrupados[categoria].map(prod => (
+                        <div key={prod.id} className="flex flex-col sm:flex-row sm:items-center p-4 hover:bg-zinc-50 transition-colors gap-4">
+                          <div className="flex items-center flex-1 gap-4">
+                            <div className="w-16 h-16 bg-zinc-100 rounded-xl overflow-hidden shrink-0 border border-zinc-200">
+                              {prod.image_url ? (
+                                <img src={prod.image_url} className="w-full h-full object-cover" alt={prod.name}/>
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-zinc-300"><ImageIcon size={24}/></div>
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-bold text-zinc-900 line-clamp-1">{prod.name}</h4>
+                              <p className="text-xs text-zinc-500 line-clamp-1 mt-0.5">{prod.description || "Sem descrição"}</p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center justify-between sm:justify-end gap-6 sm:w-auto">
+                            <div className="text-left sm:text-right">
+                              <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Preço</p>
+                              <span className="font-black text-indigo-600">R$ {Number(prod.price).toFixed(2).replace('.', ',')}</span>
+                            </div>
+                            <div className="flex gap-2 border-l border-zinc-100 pl-6">
+                              <button onClick={() => abrirModal("produtos", prod)} className="p-2.5 text-zinc-400 hover:text-indigo-600 bg-white rounded-lg border border-zinc-200 shadow-sm transition-colors"><Edit3 size={16}/></button>
+                              <button onClick={() => excluirItem(prod.id, "products")} className="p-2.5 text-zinc-400 hover:text-red-600 bg-white rounded-lg border border-zinc-200 shadow-sm transition-colors"><Trash2 size={16}/></button>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex-1">
-                          <h4 className="font-bold text-zinc-900 line-clamp-1">{prod.name}</h4>
-                          <p className="text-xs text-zinc-500 line-clamp-1 mt-0.5">{prod.description || "Sem descrição"}</p>
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center justify-between sm:justify-end gap-6 sm:w-auto">
-                        <div className="text-left sm:text-right">
-                          <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Preço</p>
-                          <span className="font-black text-indigo-600">R$ {Number(prod.price).toFixed(2).replace('.', ',')}</span>
-                        </div>
-                        <div className="flex gap-2 border-l border-zinc-100 pl-6">
-                          <button onClick={() => abrirModal("produtos", prod)} className="p-2.5 text-zinc-400 hover:text-indigo-600 bg-white rounded-lg border border-zinc-200 shadow-sm transition-colors"><Edit3 size={16}/></button>
-                          <button onClick={() => excluirItem(prod.id, "products")} className="p-2.5 text-zinc-400 hover:text-red-600 bg-white rounded-lg border border-zinc-200 shadow-sm transition-colors"><Trash2 size={16}/></button>
-                        </div>
-                      </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
-              </div>
-            ))
+              )
+            })
           )}
         </div>
       )}
@@ -441,7 +482,7 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
               <button onClick={fecharModal} className="text-zinc-400 hover:text-zinc-700"><X size={20}/></button>
             </div>
             
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
               {activeTab !== "categorias" && (
                 <div>
                   <label className="block text-xs font-bold text-zinc-500 uppercase mb-2">Foto do Item</label>
