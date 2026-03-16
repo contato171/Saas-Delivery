@@ -5,7 +5,7 @@ import { supabase } from "../lib/supabase";
 import { 
   KanbanSquare, History, CheckCircle2, XCircle, Trash2, 
   ChefHat, Bike, Clock, MapPin, CreditCard, RefreshCw, AlertTriangle,
-  VolumeX, BellRing
+  VolumeX, BellRing, Edit, Save, X
 } from "lucide-react";
 
 export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
@@ -14,20 +14,17 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
   const [abaAtiva, setAbaAtiva] = useState<"kanban" | "historico">("kanban");
   const [atualizando, setAtualizando] = useState(false);
 
+  // Estados de Edição
+  const [pedidoEditando, setPedidoEditando] = useState<any>(null);
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
+
   // Estados do Motor de Alarme
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [somBloqueado, setSomBloqueado] = useState(false);
 
-  // Inicializa o Áudio do Alarme (SOM DE TELEFONE - GESTOR IFOOD)
   useEffect(() => {
-    // Este é o som de "Trim-trim" clássico do painel de restaurantes
     audioRef.current = new Audio("/toque.mp3");
-    
-    // Deixamos em loop verdadeiro. Ele vai tocar sem parar até o pedido ser aceito.
-    if (audioRef.current) {
-      audioRef.current.loop = true;
-    }
-
+    if (audioRef.current) audioRef.current.loop = true;
     return () => {
       if (audioRef.current) {
         audioRef.current.pause();
@@ -63,11 +60,8 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
   // MOTOR DO ALARME
   useEffect(() => {
     if (!audioRef.current) return;
-
     if (pendentes.length > 0) {
-      audioRef.current.play().catch(() => {
-        setSomBloqueado(true); // Se o navegador bloquear o autoplay
-      });
+      audioRef.current.play().catch(() => setSomBloqueado(true));
     } else {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
@@ -79,9 +73,7 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
     if (audioRef.current) {
       audioRef.current.play().then(() => {
         setSomBloqueado(false);
-        if (pendentes.length === 0) {
-          audioRef.current?.pause();
-        }
+        if (pendentes.length === 0) audioRef.current?.pause();
       }).catch(err => console.error("Ainda bloqueado", err));
     }
   };
@@ -103,9 +95,46 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
     }
   };
 
-  const acaoExcluir = async (id: string) => {
-    if (window.confirm("EXCLUIR PEDIDO? Use isto apenas para trotes.")) {
-      await alterarStatus(id, "excluido");
+  // EXCLUSÃO DEFINITIVA DO BANCO DE DADOS
+  const acaoExcluirDefinitivo = async (id: string) => {
+    if (window.confirm("ATENÇÃO: Deseja EXCLUIR DEFINITIVAMENTE este pedido? Ele será apagado do banco de dados para sempre.")) {
+      try {
+        // Remove os itens do pedido primeiro (para não dar erro de chave estrangeira)
+        await supabase.from("order_items").delete().eq("order_id", id);
+        // Remove o pedido raiz
+        await supabase.from("orders").delete().eq("id", id);
+        // Remove da tela
+        setPedidos(pedidos.filter(p => p.id !== id));
+      } catch (error) {
+        alert("Erro ao excluir pedido.");
+      }
+    }
+  };
+
+  // SALVAR EDIÇÃO DO PEDIDO
+  const salvarEdicao = async () => {
+    if (!pedidoEditando) return;
+    setSalvandoEdicao(true);
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({
+          customer_name: pedidoEditando.customer_name,
+          customer_address: pedidoEditando.customer_address,
+          payment_method: pedidoEditando.payment_method,
+          total_amount: pedidoEditando.total_amount
+        })
+        .eq("id", pedidoEditando.id);
+        
+      if (error) throw error;
+      
+      // Atualiza a tela
+      setPedidos(pedidos.map(p => p.id === pedidoEditando.id ? pedidoEditando : p));
+      setPedidoEditando(null);
+    } catch (e) {
+      alert("Erro ao salvar edição.");
+    } finally {
+      setSalvandoEdicao(false);
     }
   };
 
@@ -124,7 +153,12 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
           <h3 className="font-bold text-zinc-900 mt-1">{pedido.customer_name}</h3>
           <p className="text-xs font-bold text-blue-600 flex items-center gap-1 mt-1"><Clock size={12}/> {formatarHora(pedido.created_at)}</p>
         </div>
-        <p className="font-black text-blue-600">R$ {Number(pedido.total_amount).toFixed(2).replace(".", ",")}</p>
+        <div className="flex flex-col items-end gap-2">
+          <p className="font-black text-blue-600">R$ {Number(pedido.total_amount).toFixed(2).replace(".", ",")}</p>
+          <button onClick={() => setPedidoEditando({ ...pedido })} className="text-xs font-bold text-zinc-400 hover:text-blue-600 transition-colors flex items-center gap-1">
+            <Edit size={12} /> Editar
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 space-y-3">
@@ -135,7 +169,6 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
                 <span className="font-medium text-zinc-800">
                   <span className="font-black text-zinc-900 mr-1">{item.quantity}x</span> {item.product_name}
                 </span>
-                
                 {item.options_text && (
                   <p className="text-xs font-medium text-zinc-500 mt-1 whitespace-pre-line pl-3 border-l-2 border-zinc-200 leading-relaxed">
                     {item.options_text}
@@ -162,7 +195,7 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
               <button onClick={() => acaoRecusar(pedido)} className="flex-1 border border-red-200 text-red-600 hover:bg-red-50 font-bold py-2 rounded-lg text-xs flex justify-center items-center gap-1 transition-colors">
                 <XCircle size={14}/> Recusar
               </button>
-              <button onClick={() => acaoExcluir(pedido.id)} className="flex-1 border border-zinc-200 text-zinc-500 hover:bg-zinc-100 font-bold py-2 rounded-lg text-xs flex justify-center items-center gap-1 transition-colors">
+              <button onClick={() => acaoExcluirDefinitivo(pedido.id)} className="flex-1 border border-zinc-200 text-zinc-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200 font-bold py-2 rounded-lg text-xs flex justify-center items-center gap-1 transition-colors">
                 <Trash2 size={14}/> Excluir
               </button>
             </div>
@@ -185,8 +218,46 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
   );
 
   return (
-    <div className="space-y-6 text-zinc-900 font-sans h-full flex flex-col pb-10">
+    <div className="space-y-6 text-zinc-900 font-sans h-full flex flex-col pb-10 relative">
       
+      {/* MODAL DE EDIÇÃO DE PEDIDO */}
+      {pedidoEditando && (
+        <div className="fixed inset-0 z-[500] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b border-zinc-100 flex justify-between items-center bg-zinc-50">
+              <h2 className="font-bold text-lg">Editar Pedido #{pedidoEditando.id.split('-')[0].toUpperCase()}</h2>
+              <button onClick={() => setPedidoEditando(null)} className="text-zinc-400 hover:text-zinc-800"><X size={20}/></button>
+            </div>
+            
+            <div className="p-5 overflow-y-auto space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-zinc-600 mb-1 uppercase tracking-wider">Nome do Cliente</label>
+                <input type="text" value={pedidoEditando.customer_name} onChange={e => setPedidoEditando({...pedidoEditando, customer_name: e.target.value})} className="w-full border border-zinc-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-600 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-600 mb-1 uppercase tracking-wider">Endereço de Entrega</label>
+                <textarea value={pedidoEditando.customer_address} onChange={e => setPedidoEditando({...pedidoEditando, customer_address: e.target.value})} rows={3} className="w-full border border-zinc-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-600 outline-none resize-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-600 mb-1 uppercase tracking-wider">Método de Pagamento</label>
+                <input type="text" value={pedidoEditando.payment_method} onChange={e => setPedidoEditando({...pedidoEditando, payment_method: e.target.value})} className="w-full border border-zinc-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-600 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-zinc-600 mb-1 uppercase tracking-wider">Valor Total (R$)</label>
+                <input type="number" step="0.01" value={pedidoEditando.total_amount} onChange={e => setPedidoEditando({...pedidoEditando, total_amount: e.target.value})} className="w-full border border-zinc-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-600 outline-none" />
+              </div>
+            </div>
+
+            <div className="p-5 border-t border-zinc-100 flex gap-3 bg-zinc-50">
+              <button onClick={() => setPedidoEditando(null)} className="flex-1 py-3 bg-white border border-zinc-200 text-zinc-700 font-bold rounded-xl hover:bg-zinc-50 transition-colors">Cancelar</button>
+              <button onClick={salvarEdicao} disabled={salvandoEdicao} className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-colors flex justify-center items-center gap-2">
+                {salvandoEdicao ? <RefreshCw size={18} className="animate-spin" /> : <><Save size={18}/> Salvar</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Cozinha / Despache</h1>
@@ -266,11 +337,12 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
                   <th className="p-4 font-semibold">Cliente</th>
                   <th className="p-4 font-semibold">Valor</th>
                   <th className="p-4 font-semibold">Status Final</th>
+                  <th className="p-4 font-semibold text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100 text-sm">
                 {historico.length === 0 ? (
-                   <tr><td colSpan={4} className="p-8 text-center text-zinc-500">Nenhum histórico encontrado.</td></tr>
+                   <tr><td colSpan={5} className="p-8 text-center text-zinc-500">Nenhum histórico encontrado.</td></tr>
                 ) : (
                   historico.map(pedido => (
                     <tr key={pedido.id} className="hover:bg-zinc-50 transition-colors">
@@ -288,6 +360,14 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
                         }`}>
                           {pedido.status === "concluido" ? "Entregue" : pedido.status === "cancelado" ? "Recusado" : "Excluído"}
                         </span>
+                      </td>
+                      <td className="p-4 text-right flex justify-end gap-2">
+                         <button onClick={() => setPedidoEditando({ ...pedido })} className="p-2 text-zinc-400 hover:text-blue-600 bg-white border border-zinc-200 rounded-lg shadow-sm transition-colors" title="Editar Pedido">
+                            <Edit size={16} />
+                         </button>
+                         <button onClick={() => acaoExcluirDefinitivo(pedido.id)} className="p-2 text-zinc-400 hover:text-red-600 bg-white border border-zinc-200 rounded-lg shadow-sm transition-colors" title="Excluir Definitivamente">
+                            <Trash2 size={16} />
+                         </button>
                       </td>
                     </tr>
                   ))
