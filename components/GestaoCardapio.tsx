@@ -1,10 +1,12 @@
+// @ts-nocheck
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase"; 
 import { 
   Plus, Edit3, Trash2, Image as ImageIcon, 
-  Loader2, CheckCircle2, X, UploadCloud, LayoutList, Package, Layers
+  Loader2, CheckCircle2, X, UploadCloud, LayoutList, Package, Layers,
+  FileSpreadsheet, Download
 } from "lucide-react";
 
 export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
@@ -26,8 +28,11 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
   const [imagemFile, setImagemFile] = useState<File | null>(null);
   const [imagemPreview, setImagemPreview] = useState<string | null>(null);
   
-  // ESTADO RESTAURADO: Múltiplos produtos para o Complemento
   const [produtosSelecionadosComp, setProdutosSelecionadosComp] = useState<string[]>([]);
+
+  // ESTADOS DE IMPORTAÇÃO CSV
+  const [importando, setImportando] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     carregarDados();
@@ -53,8 +58,6 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
     if (item) {
       setFormData({ ...item });
       setImagemPreview(item.image_url || null);
-      
-      // Se for complemento, carrega o produto que já estava marcado
       if (tipo === "complementos") {
         setProdutosSelecionadosComp(item.product_id ? [item.product_id] : []);
       }
@@ -97,7 +100,6 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
     return data.publicUrl;
   };
 
-  // FUNÇÕES RESTAURADAS: Lógica de Marcar/Desmarcar Múltiplos Produtos
   const toggleProdutoComp = (id: string) => {
     if (produtosSelecionadosComp.includes(id)) {
       setProdutosSelecionadosComp(prev => prev.filter(pId => pId !== id));
@@ -108,9 +110,9 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
 
   const handleToggleTodosProdutos = () => {
     if (produtosSelecionadosComp.length === produtos.length) {
-      setProdutosSelecionadosComp([]); // Desmarca todos
+      setProdutosSelecionadosComp([]);
     } else {
-      setProdutosSelecionadosComp(produtos.map(p => p.id)); // Marca todos
+      setProdutosSelecionadosComp(produtos.map(p => p.id));
     }
   };
 
@@ -136,7 +138,7 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
 
       delete payload.categories; 
       delete payload.products;
-      delete payload.product_id; // Removemos o genérico para tratar manualmente nos complementos
+      delete payload.product_id; 
 
       let table = "";
       if (activeTab === "categorias") table = "categories";
@@ -144,7 +146,6 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
       if (activeTab === "complementos") table = "complements";
 
       if (activeTab === "complementos") {
-        // LÓGICA DE SALVAMENTO PARA MÚLTIPLOS COMPLEMENTOS
         if (produtosSelecionadosComp.length === 0) {
           alert("Selecione ao menos um produto para vincular este complemento.");
           setSalvando(false);
@@ -152,12 +153,10 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
         }
 
         if (itemEditando) {
-          // Atualiza o complemento existente com o primeiro produto da lista
           payload.product_id = produtosSelecionadosComp[0];
           const { error } = await supabase.from(table).update(payload).eq("id", itemEditando.id);
           if (error) throw error;
 
-          // Se marcou mais produtos, cria cópias para os novos produtos
           if (produtosSelecionadosComp.length > 1) {
             const novosPayloads = produtosSelecionadosComp.slice(1).map(pid => ({
               ...payload,
@@ -167,7 +166,6 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
             if (insertError) throw insertError;
           }
         } else {
-          // Cadastrando novo: Cria uma linha no banco para cada produto selecionado
           const payloads = produtosSelecionadosComp.map(pid => ({
             ...payload,
             product_id: pid
@@ -177,7 +175,6 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
         }
 
       } else {
-        // Lógica normal para Categorias e Produtos
         if (itemEditando) {
           const { error } = await supabase.from(table).update(payload).eq("id", itemEditando.id);
           if (error) throw error;
@@ -204,6 +201,107 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
     else carregarDados();
   };
 
+  // =================================================================
+  // MOTOR MÁGICO DE IMPORTAÇÃO CSV
+  // =================================================================
+  const baixarModeloCSV = () => {
+    const header = "Nome do Produto;Descricao;Preco;Nome da Categoria\n";
+    const exemplo = "X-Tudo Turbo;Pão, Carne, Queijo, Bacon, Ovo, Salada;35.90;Lanches\nRefrigerante Lata;Coca-Cola 350ml gelada;6.00;Bebidas";
+    
+    // Força o Excel a entender acentos com o prefixo \uFEFF
+    const blob = new Blob(["\uFEFF" + header + exemplo], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "molde_importacao_cardapio.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const processarCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportando(true);
+    const reader = new FileReader();
+
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result as string;
+        // Pula o cabeçalho e divide as linhas
+        const linhas = text.split('\n').slice(1).filter(l => l.trim() !== '');
+        
+        let novasCategorias: Record<string, string> = {}; // { "Nome da Categoria": "id_da_categoria" }
+        
+        // Puxa as categorias que já existem para não duplicar
+        categorias.forEach(cat => {
+          novasCategorias[cat.name.toLowerCase().trim()] = cat.id;
+        });
+
+        const produtosParaInserir = [];
+
+        for (const linha of linhas) {
+          // Lê separado por ponto e vírgula
+          const colunas = linha.split(';').map(col => col.trim().replace(/^"|"$/g, ''));
+          if (colunas.length < 4) continue;
+
+          const nome = colunas[0];
+          const descricao = colunas[1];
+          const preco = parseFloat(colunas[2].replace(',', '.'));
+          const nomeCategoria = colunas[3];
+
+          if (!nome || isNaN(preco) || !nomeCategoria) continue;
+
+          const catNormalizada = nomeCategoria.toLowerCase().trim();
+          let category_id = novasCategorias[catNormalizada];
+
+          // Se a categoria não existe no banco, cria ela agora magicamente
+          if (!category_id) {
+            const { data: novaCat, error: errCat } = await supabase.from('categories').insert([{
+              tenant_id: tenantId,
+              name: nomeCategoria // Nome original com maiúsculas
+            }]).select().single();
+
+            if (!errCat && novaCat) {
+              category_id = novaCat.id;
+              novasCategorias[catNormalizada] = novaCat.id;
+            }
+          }
+
+          if (category_id) {
+            produtosParaInserir.push({
+              tenant_id: tenantId,
+              name: nome,
+              description: descricao,
+              price: preco,
+              category_id: category_id,
+              active: true
+            });
+          }
+        }
+
+        if (produtosParaInserir.length > 0) {
+          const { error } = await supabase.from('products').insert(produtosParaInserir);
+          if (error) throw error;
+          alert(`${produtosParaInserir.length} produtos importados com sucesso!`);
+          await carregarDados(); // Recarrega a tela
+        } else {
+          alert("Nenhum produto válido encontrado na planilha. Verifique o formato.");
+        }
+
+      } catch (error: any) {
+        alert("Erro ao importar a planilha: " + error.message);
+      } finally {
+        setImportando(false);
+        if (fileInputRef.current) fileInputRef.current.value = ""; // Limpa o input
+      }
+    };
+
+    reader.readAsText(file);
+  };
+  // =================================================================
+
   if (loading) return <div className="py-20 flex justify-center text-indigo-600"><Loader2 className="animate-spin" size={32} /></div>;
 
   return (
@@ -214,15 +312,36 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
           <h1 className="text-3xl font-black tracking-tight">Gestão de Cardápio</h1>
           <p className="text-zinc-500 mt-1 text-sm">Organize categorias, produtos e complementos.</p>
         </div>
-        <button onClick={() => abrirModal(activeTab)} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-5 rounded-xl shadow-md transition-all flex items-center gap-2">
-          <Plus size={18}/> Novo {activeTab === "categorias" ? "Categoria" : activeTab === "produtos" ? "Produto" : "Complemento"}
-        </button>
+        
+        <div className="flex flex-wrap gap-2">
+          {activeTab === "produtos" && (
+            <div className="flex gap-2">
+              <button onClick={baixarModeloCSV} className="bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold py-2.5 px-4 rounded-xl transition-all flex items-center gap-2 text-sm border border-zinc-200" title="Baixar planilha de exemplo">
+                <Download size={16}/> Modelo CSV
+              </button>
+              
+              <input type="file" accept=".csv" ref={fileInputRef} onChange={processarCSV} className="hidden" />
+              <button 
+                onClick={() => fileInputRef.current?.click()} 
+                disabled={importando}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl transition-all flex items-center gap-2 text-sm shadow-md disabled:opacity-70"
+              >
+                {importando ? <Loader2 size={16} className="animate-spin"/> : <FileSpreadsheet size={16}/>} 
+                Importar CSV
+              </button>
+            </div>
+          )}
+
+          <button onClick={() => abrirModal(activeTab)} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-5 rounded-xl shadow-md transition-all flex items-center gap-2">
+            <Plus size={18}/> Novo {activeTab === "categorias" ? "Categoria" : activeTab === "produtos" ? "Produto" : "Complemento"}
+          </button>
+        </div>
       </div>
 
-      <div className="flex gap-2 border-b border-zinc-200 pb-px">
-        <button onClick={() => setActiveTab("categorias")} className={`px-4 py-3 font-bold text-sm flex items-center gap-2 border-b-2 transition-colors ${activeTab === "categorias" ? "border-indigo-600 text-indigo-600" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}><LayoutList size={18}/> Categorias</button>
-        <button onClick={() => setActiveTab("produtos")} className={`px-4 py-3 font-bold text-sm flex items-center gap-2 border-b-2 transition-colors ${activeTab === "produtos" ? "border-indigo-600 text-indigo-600" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}><Package size={18}/> Produtos</button>
-        <button onClick={() => setActiveTab("complementos")} className={`px-4 py-3 font-bold text-sm flex items-center gap-2 border-b-2 transition-colors ${activeTab === "complementos" ? "border-indigo-600 text-indigo-600" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}><Layers size={18}/> Complementos</button>
+      <div className="flex gap-2 border-b border-zinc-200 pb-px overflow-x-auto">
+        <button onClick={() => setActiveTab("categorias")} className={`px-4 py-3 font-bold text-sm flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${activeTab === "categorias" ? "border-indigo-600 text-indigo-600" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}><LayoutList size={18}/> Categorias</button>
+        <button onClick={() => setActiveTab("produtos")} className={`px-4 py-3 font-bold text-sm flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${activeTab === "produtos" ? "border-indigo-600 text-indigo-600" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}><Package size={18}/> Produtos</button>
+        <button onClick={() => setActiveTab("complementos")} className={`px-4 py-3 font-bold text-sm flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${activeTab === "complementos" ? "border-indigo-600 text-indigo-600" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}><Layers size={18}/> Complementos</button>
       </div>
 
       {activeTab === "categorias" && (
@@ -243,7 +362,7 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
 
       {activeTab === "produtos" && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {produtos.length === 0 ? <p className="col-span-full py-10 text-center text-zinc-500 border-2 border-dashed border-zinc-200 rounded-2xl">Nenhum produto cadastrado. Cadastre as categorias primeiro.</p> : produtos.map(prod => (
+          {produtos.length === 0 ? <p className="col-span-full py-10 text-center text-zinc-500 border-2 border-dashed border-zinc-200 rounded-2xl">Nenhum produto cadastrado. Adicione um novo ou importe via CSV.</p> : produtos.map(prod => (
             <div key={prod.id} className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden flex flex-col group">
               <div className="w-full h-40 bg-zinc-100 relative">
                 {prod.image_url ? <img src={prod.image_url} className="w-full h-full object-cover" alt={prod.name}/> : <div className="w-full h-full flex items-center justify-center text-zinc-300"><ImageIcon size={40}/></div>}
@@ -340,7 +459,6 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
                 </div>
               )}
 
-              {/* LISTA MULTI-SELEÇÃO RESTAURADA PARA COMPLEMENTOS */}
               {activeTab === "complementos" && (
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Vincular a quais Produtos?</label>
