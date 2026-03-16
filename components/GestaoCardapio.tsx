@@ -35,14 +35,19 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [buscaProduto, setBuscaProduto] = useState("");
   
-  // Estado para controlar quais categorias estão recolhidas
-  const [categoriasOcultas, setCategoriasOcultas] = useState<Record<string, boolean>>({});
+  // ESTADO RESTAURADO: Controla quais categorias estão ABERTAS (padrão: todas fechadas, com memória)
+  const [categoriasAbertas, setCategoriasAbertas] = useState<Record<string, boolean>>(() => {
+    if (typeof window !== "undefined") {
+      const salvo = localStorage.getItem(`@saas_categorias_abertas_${tenantId}`);
+      if (salvo) return JSON.parse(salvo);
+    }
+    return {};
+  });
 
   useEffect(() => {
     carregarDados(true);
   }, [tenantId]);
 
-  // A variável showLoader evita que a página pisque e perca o scroll ao salvar
   async function carregarDados(showLoader = false) {
     if (showLoader) setLoading(true);
     const [catRes, prodRes, compRes] = await Promise.all([
@@ -121,11 +126,13 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
     }
   };
 
+  // MÁGICA: Abre/Fecha a sanfona e salva no cache do navegador
   const toggleCategoriaVisivel = (categoriaNome: string) => {
-    setCategoriasOcultas(prev => ({
-      ...prev,
-      [categoriaNome]: !prev[categoriaNome]
-    }));
+    setCategoriasAbertas(prev => {
+      const novoEstado = { ...prev, [categoriaNome]: !prev[categoriaNome] };
+      localStorage.setItem(`@saas_categorias_abertas_${tenantId}`, JSON.stringify(novoEstado));
+      return novoEstado;
+    });
   };
 
   const salvarItem = async () => {
@@ -196,7 +203,6 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
         }
       }
 
-      // Chama sem o loader para preservar o scroll!
       await carregarDados(false);
       fecharModal();
     } catch (error: any) {
@@ -211,7 +217,7 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
     if (!confirm("Tem a certeza que deseja excluir? Esta ação não pode ser desfeita.")) return;
     const { error } = await supabase.from(table).delete().eq("id", id);
     if (error) alert("Erro ao excluir: " + error.message);
-    else carregarDados(false); // Atualiza em background sem pular pro topo
+    else carregarDados(false);
   };
 
   const baixarModeloCSV = () => {
@@ -305,7 +311,6 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
     reader.readAsText(file);
   };
 
-  // Filtrar e agrupar produtos
   const produtosFiltrados = produtos.filter(p => 
     p.name.toLowerCase().includes(buscaProduto.toLowerCase()) || 
     (p.description && p.description.toLowerCase().includes(buscaProduto.toLowerCase()))
@@ -378,7 +383,6 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
 
       {activeTab === "produtos" && (
         <div className="space-y-6">
-          {/* BARRA DE BUSCA */}
           <div className="relative max-w-md">
             <Search className="absolute left-3 top-3 text-zinc-400" size={18} />
             <input 
@@ -394,11 +398,10 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
             <p className="col-span-full py-10 text-center text-zinc-500 border-2 border-dashed border-zinc-200 rounded-2xl">Nenhum produto encontrado.</p>
           ) : (
             Object.keys(produtosAgrupados).sort().map(categoria => {
-              const estaOculto = categoriasOcultas[categoria];
+              const estaAberta = categoriasAbertas[categoria]; // Se for true, mostra a lista. Padrão é undefined (fechada).
               
               return (
                 <div key={categoria} className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden transition-all">
-                  {/* Header da Categoria - CLICÁVEL (Sanfona) */}
                   <div 
                     onClick={() => toggleCategoriaVisivel(categoria)}
                     className="bg-zinc-50/80 px-6 py-4 border-b border-zinc-200 flex justify-between items-center cursor-pointer hover:bg-zinc-100 transition-colors"
@@ -407,12 +410,11 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
                       {categoria} <span className="bg-zinc-200 text-zinc-600 text-[10px] px-2 py-0.5 rounded-full">{produtosAgrupados[categoria].length}</span>
                     </h3>
                     <button className="text-zinc-500">
-                      {estaOculto ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
+                      {estaAberta ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                     </button>
                   </div>
                   
-                  {/* Lista de Produtos (Só aparece se NÃO estiver oculto) */}
-                  {!estaOculto && (
+                  {estaAberta && (
                     <div className="divide-y divide-zinc-100 animate-in slide-in-from-top-2">
                       {produtosAgrupados[categoria].map(prod => (
                         <div key={prod.id} className="flex flex-col sm:flex-row sm:items-center p-4 hover:bg-zinc-50 transition-colors gap-4">
@@ -451,7 +453,6 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
         </div>
       )}
 
-      {/* ABA COMPLEMENTOS */}
       {activeTab === "complementos" && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {complementos.length === 0 ? <p className="col-span-full py-10 text-center text-zinc-500 border-2 border-dashed border-zinc-200 rounded-2xl">Nenhum complemento cadastrado.</p> : complementos.map(comp => (
@@ -473,7 +474,6 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
         </div>
       )}
 
-      {/* MODAL PADRÃO */}
       {modalOpen && (
         <div className="fixed inset-0 bg-zinc-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95">
