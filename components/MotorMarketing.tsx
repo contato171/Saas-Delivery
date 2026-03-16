@@ -1,12 +1,13 @@
 // @ts-nocheck
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase"; 
 import { 
   Wand2, Target, Megaphone, Facebook, 
   CheckCircle2, Loader2, Image as ImageIcon,
-  Clock, MapPin, Edit3, DollarSign, Search, Layers, ChevronDown, ChevronUp
+  Clock, MapPin, Edit3, DollarSign, Search, Layers, ChevronDown, ChevronUp,
+  ImagePlay, Film, UploadCloud
 } from "lucide-react";
 
 export default function MotorMarketing({ tenantId }: { tenantId: string }) {
@@ -31,6 +32,14 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
   const [pixelSelecionado, setPixelSelecionado] = useState("");
 
   const [etapa, setEtapa] = useState<1 | 2 | 3>(1);
+  
+  // ==========================================
+  // TIPO DE ANÚNCIO (SINGLE POST VS CARROSSEL)
+  // ==========================================
+  const [tipoAnuncio, setTipoAnuncio] = useState<"single" | "carousel">("single");
+  const [midiaUpload, setMidiaUpload] = useState<File | null>(null);
+  const [midiaPreview, setMidiaPreview] = useState<string | null>(null);
+  const [midiaType, setMidiaType] = useState<"image" | "video" | null>(null);
   
   // Busca de produtos e Estado da Sanfona
   const [buscaProduto, setBuscaProduto] = useState("");
@@ -115,12 +124,24 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
     window.location.href = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&state=${tenantId}&scope=${scope}`;
   };
 
+  // MÁGICA: Regra de Seleção Dinâmica
   const toggleProduto = (prod: any) => {
-    if (produtosSelecionados.find(p => p.id === prod.id)) {
-      setProdutosSelecionados(produtosSelecionados.filter(p => p.id !== prod.id));
+    if (tipoAnuncio === "single") {
+      // No modo single, se clicar em um que já tá selecionado, desmarca. Senão, substitui pelo novo.
+      if (produtosSelecionados.find(p => p.id === prod.id)) {
+        setProdutosSelecionados([]);
+        setMidiaUpload(null); setMidiaPreview(null); setMidiaType(null);
+      } else {
+        setProdutosSelecionados([prod]);
+      }
     } else {
-      if (produtosSelecionados.length < 5) setProdutosSelecionados([...produtosSelecionados, prod]);
-      else alert("Selecione no máximo 5 produtos para o carrossel.");
+      // Modo Carrossel
+      if (produtosSelecionados.find(p => p.id === prod.id)) {
+        setProdutosSelecionados(produtosSelecionados.filter(p => p.id !== prod.id));
+      } else {
+        if (produtosSelecionados.length < 30) setProdutosSelecionados([...produtosSelecionados, prod]);
+        else alert("Selecione no máximo 30 produtos para o carrossel.");
+      }
     }
   };
 
@@ -132,14 +153,22 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
     });
   };
 
+  const handleMediaUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setMidiaUpload(file);
+    setMidiaPreview(URL.createObjectURL(file));
+    setMidiaType(file.type.startsWith('video/') ? 'video' : 'image');
+  };
+
   const gerarAnuncioIA = async () => {
-    if (produtosSelecionados.length < 2) return alert("Selecione ao menos 2 produtos.");
     setEtapa(2); 
     try {
       const res = await fetch('/api/ai/gerar-anuncio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ produtos: produtosSelecionados, tenantName: tenant?.name || "Nosso Restaurante" })
+        // Enviamos o tipo de anúncio pra IA gerar texto focado em 1 item ou focado num carrossel de itens
+        body: JSON.stringify({ produtos: produtosSelecionados, tenantName: tenant?.name || "Nosso Restaurante", tipoAnuncio })
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -149,7 +178,7 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
     } catch (error: any) {
       setAnuncioGerado({
         hook: "Bateu aquela fome inexplicável? 🤤",
-        body: "Não passe vontade! Preparamos os melhores pratos da cidade, feitos com ingredientes selecionados e entregues quentinhos na sua porta.",
+        body: "Não passe vontade! Preparamos os melhores produtos da cidade, feitos com ingredientes selecionados e entregues quentinhos na sua porta.",
         cta: "👉 Clique abaixo e faça o seu pedido agora!"
       });
       setEtapa(3);
@@ -187,9 +216,24 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
     setPublicando(true);
 
     try {
+      let uploadedUrl = null;
+      
+      // Se for anúncio único e ele subiu um vídeo/foto, salva no Supabase antes de mandar pro Meta
+      if (tipoAnuncio === "single" && midiaUpload) {
+        const ext = midiaUpload.name.split('.').pop();
+        const fileName = `ads/${tenantId}_${Date.now()}.${ext}`;
+        const { error } = await supabase.storage.from('cardapio').upload(fileName, midiaUpload);
+        if (error) throw new Error("Erro ao fazer upload da mídia. Tente novamente.");
+        const { data } = supabase.storage.from('cardapio').getPublicUrl(fileName);
+        uploadedUrl = data.publicUrl;
+      }
+
       const payload = {
         tenantId: tenantId,
+        tipoAnuncio: tipoAnuncio,
         produtos: produtosSelecionados,
+        midiaUnicaUrl: uploadedUrl || (tipoAnuncio === "single" ? produtosSelecionados[0].image_url : null),
+        midiaType: midiaType || 'image',
         orcamentoTotal: orcamentoTotal,
         diasVeiculacao: diasVeiculacao,
         cidadeMeta: cidadeSelecionadaMeta, 
@@ -219,9 +263,6 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
     }
   };
 
-  // ==========================================
-  // AGRUPAMENTO DE PRODUTOS PARA A TELA
-  // ==========================================
   const produtosFiltrados = produtos.filter(p => 
     p.name.toLowerCase().includes(buscaProduto.toLowerCase()) || 
     (p.description && p.description.toLowerCase().includes(buscaProduto.toLowerCase()))
@@ -234,6 +275,8 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
     return acc;
   }, {} as Record<string, any[]>);
 
+  // Validação para habilitar o botão de avançar
+  const podeConfigurarCampanha = tipoAnuncio === "single" ? produtosSelecionados.length === 1 : produtosSelecionados.length >= 2;
 
   if (loading) {
     return (
@@ -268,7 +311,7 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
         <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 size={40} /></div>
         <h2 className="text-2xl font-black text-zinc-900 mb-2">Campanha de Conversão no Ar! 🚀</h2>
         <p className="text-zinc-500 max-w-md mx-auto mb-8">O seu anúncio já está no Gerenciador da Meta pronto para vender.</p>
-        <button onClick={() => { setEtapa(1); setPublicadoSucesso(false); setProdutosSelecionados([]); setCidadeSelecionadaMeta(null); }} className="bg-zinc-900 text-white font-bold py-3 px-8 rounded-xl transition-colors">Nova Campanha</button>
+        <button onClick={() => { setEtapa(1); setPublicadoSucesso(false); setProdutosSelecionados([]); setCidadeSelecionadaMeta(null); setMidiaUpload(null); setMidiaPreview(null); }} className="bg-zinc-900 text-white font-bold py-3 px-8 rounded-xl transition-colors">Nova Campanha</button>
       </div>
     );
   }
@@ -281,10 +324,27 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
 
       {etapa === 1 && (
         <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden animate-in fade-in">
-          <div className="p-6 border-b border-zinc-100 bg-zinc-50/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
+          <div className="p-6 border-b border-zinc-100 bg-zinc-50/50 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            
+            <div className="flex-1">
               <h2 className="font-bold text-lg text-zinc-900">1. O que vamos anunciar hoje?</h2>
-              <p className="text-sm text-zinc-500">Selecione de 2 a 5 produtos para criar um anúncio em Carrossel.</p>
+              
+              {/* TOGGLE TIPO DE ANÚNCIO */}
+              <div className="flex bg-zinc-200/50 p-1 rounded-xl mt-4 max-w-md border border-zinc-200 shadow-inner">
+                <button 
+                  onClick={() => { setTipoAnuncio('single'); setProdutosSelecionados([]); setMidiaUpload(null); setMidiaPreview(null); }} 
+                  className={`flex-1 py-2 px-4 rounded-lg text-sm font-bold transition-all flex justify-center items-center gap-2 ${tipoAnuncio === 'single' ? 'bg-white text-indigo-600 shadow-sm border border-zinc-200' : 'text-zinc-500 hover:text-zinc-700'}`}
+                >
+                  <ImagePlay size={16}/> 1 Produto (Vídeo/Foto)
+                </button>
+                <button 
+                  onClick={() => { setTipoAnuncio('carousel'); setProdutosSelecionados([]); setMidiaUpload(null); setMidiaPreview(null); }} 
+                  className={`flex-1 py-2 px-4 rounded-lg text-sm font-bold transition-all flex justify-center items-center gap-2 ${tipoAnuncio === 'carousel' ? 'bg-white text-indigo-600 shadow-sm border border-zinc-200' : 'text-zinc-500 hover:text-zinc-700'}`}
+                >
+                  <Layers size={16}/> Carrossel (Até 30)
+                </button>
+              </div>
+
             </div>
             
             <div className="relative w-full md:w-72">
@@ -300,6 +360,34 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
           </div>
 
           <div className="p-6 space-y-6">
+            {/* ÁREA DE UPLOAD (Só aparece no modo SINGLE se 1 produto estiver selecionado) */}
+            {tipoAnuncio === "single" && produtosSelecionados.length === 1 && (
+              <div className="bg-indigo-50 border border-indigo-200 p-6 rounded-2xl animate-in slide-in-from-top-4 flex flex-col md:flex-row items-center gap-6">
+                <div className="flex-1">
+                  <h3 className="font-black text-indigo-900 text-lg flex items-center gap-2"><Film size={20}/> Subir Mídia de Alta Conversão</h3>
+                  <p className="text-sm text-indigo-700 mt-1 mb-4">Por padrão, usaremos a foto do cardápio do <strong>{produtosSelecionados[0].name}</strong>. Mas se você tiver um vídeo Reels mostrando o produto, ou uma arte pronta, suba aqui! Vídeos chamam 3x mais atenção.</p>
+                  
+                  <label className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6 py-3 rounded-xl cursor-pointer transition-colors shadow-md">
+                    <UploadCloud size={20}/>
+                    Carregar Vídeo ou Foto
+                    <input type="file" accept="image/*,video/*" onChange={handleMediaUpload} className="hidden" />
+                  </label>
+                </div>
+                
+                <div className="w-full md:w-48 aspect-square bg-white rounded-xl border-2 border-indigo-200 border-dashed overflow-hidden flex items-center justify-center shrink-0 shadow-sm relative">
+                  {midiaType === 'video' && midiaPreview ? (
+                    <video src={midiaPreview} autoPlay muted loop className="w-full h-full object-cover" />
+                  ) : midiaPreview ? (
+                    <img src={midiaPreview} className="w-full h-full object-cover" />
+                  ) : produtosSelecionados[0].image_url ? (
+                    <img src={produtosSelecionados[0].image_url} className="w-full h-full object-cover opacity-50" />
+                  ) : (
+                    <span className="text-indigo-300 text-xs font-bold text-center p-4">Nenhuma mídia customizada</span>
+                  )}
+                </div>
+              </div>
+            )}
+
             {Object.keys(produtosAgrupados).length === 0 ? (
                <p className="text-center py-10 text-zinc-500">Nenhum produto encontrado.</p>
             ) : (
@@ -308,7 +396,6 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
                 
                 return (
                   <div key={categoria} className="bg-white rounded-xl border border-zinc-200 overflow-hidden shadow-sm transition-all">
-                    {/* SANFONA - CABEÇALHO */}
                     <div 
                       onClick={() => toggleCategoriaVisivel(categoria)}
                       className="bg-zinc-50/80 px-6 py-4 border-b border-zinc-200 flex justify-between items-center cursor-pointer hover:bg-zinc-100 transition-colors"
@@ -321,20 +408,20 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
                       </button>
                     </div>
 
-                    {/* SANFONA - CORPO */}
                     {estaAberta && (
                       <div className="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 animate-in slide-in-from-top-2">
                         {produtosAgrupados[categoria].map(prod => {
                           const selecionado = produtosSelecionados.find(p => p.id === prod.id);
                           return (
-                            <div key={prod.id} onClick={() => toggleProduto(prod)} className={`border-2 rounded-xl p-4 cursor-pointer transition-all flex gap-3 ${selecionado ? 'border-purple-600 bg-purple-50/30' : 'border-zinc-200 hover:border-zinc-300'}`}>
+                            <div key={prod.id} onClick={() => toggleProduto(prod)} className={`border-2 rounded-xl p-4 cursor-pointer transition-all flex gap-3 ${selecionado ? 'border-indigo-600 bg-indigo-50/50 shadow-md transform scale-[1.02]' : 'border-zinc-200 hover:border-zinc-300'}`}>
                               <div className="w-16 h-16 bg-zinc-100 rounded-lg overflow-hidden shrink-0 border border-zinc-200">
                                 {prod.image_url ? <img src={prod.image_url} alt={prod.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-zinc-300"><ImageIcon size={24}/></div>}
                               </div>
                               <div className="flex flex-col justify-center flex-1">
-                                <h3 className="font-bold text-sm leading-tight line-clamp-2 mb-1">{prod.name}</h3>
-                                <p className="text-purple-700 font-black text-sm">R$ {Number(prod.price).toFixed(2).replace('.', ',')}</p>
+                                <h3 className="font-bold text-sm leading-tight line-clamp-2 mb-1 text-zinc-900">{prod.name}</h3>
+                                <p className="text-indigo-600 font-black text-sm">R$ {Number(prod.price).toFixed(2).replace('.', ',')}</p>
                               </div>
+                              {selecionado && <div className="absolute top-2 right-2 bg-indigo-600 text-white rounded-full p-1"><CheckCircle2 size={12}/></div>}
                             </div>
                           );
                         })}
@@ -347,14 +434,16 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
           </div>
           
           <div className="p-6 border-t border-zinc-100 bg-zinc-50/50 flex items-center justify-between sticky bottom-0 z-10 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)]">
-            <div className="font-bold">{produtosSelecionados.length} selecionados</div>
-            <button onClick={gerarAnuncioIA} disabled={produtosSelecionados.length < 2} className="bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed">Configurar Campanha</button>
+            <div className="font-bold">{produtosSelecionados.length} {tipoAnuncio === "single" ? "selecionado (1 máx)" : "selecionados"}</div>
+            <button onClick={gerarAnuncioIA} disabled={!podeConfigurarCampanha} className="bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed">
+              Avançar e Configurar Anúncio
+            </button>
           </div>
         </div>
       )}
 
       {etapa === 2 && (
-        <div className="bg-white rounded-2xl p-12 text-center min-h-[400px] flex flex-col items-center justify-center"><Loader2 className="animate-spin text-indigo-600 mb-4" size={40}/><h2 className="text-xl font-bold">A preparar máquina de vendas...</h2></div>
+        <div className="bg-white rounded-2xl p-12 text-center min-h-[400px] flex flex-col items-center justify-center"><Loader2 className="animate-spin text-indigo-600 mb-4" size={40}/><h2 className="text-xl font-bold">A inteligência está montando sua campanha...</h2></div>
       )}
 
       {etapa === 3 && anuncioGerado && (
@@ -402,7 +491,6 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
               <div className="p-5 border-b border-zinc-100 bg-zinc-50"><h2 className="font-black text-zinc-900 flex items-center gap-2"><Target size={20}/> Estratégia de Vendas</h2></div>
               
               <div className="p-6 space-y-6">
-                
                 <div className="space-y-3">
                   <label className="text-xs font-bold text-zinc-500 uppercase flex items-center gap-1"><MapPin size={14}/> Cidade de Veiculação</label>
                   {!cidadeSelecionadaMeta ? (
@@ -456,7 +544,7 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
             <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
               <div className="p-5 border-b border-zinc-100 bg-zinc-50"><h2 className="font-bold text-zinc-900 flex items-center gap-2"><Megaphone size={20}/> Textos</h2></div>
               <div className="p-5 space-y-5">
-                <div><label className="text-xs font-bold text-zinc-400">HOOK</label><input type="text" value={anuncioGerado.hook} onChange={e => handleCopyChange("hook", e.target.value)} className="w-full border p-3 rounded-lg" /></div>
+                <div><label className="text-xs font-bold text-zinc-400">HOOK (O Gancho)</label><input type="text" value={anuncioGerado.hook} onChange={e => handleCopyChange("hook", e.target.value)} className="w-full border p-3 rounded-lg" /></div>
                 <div><label className="text-xs font-bold text-zinc-400">CORPO</label><textarea rows={4} value={anuncioGerado.body} onChange={e => handleCopyChange("body", e.target.value)} className="w-full border p-3 rounded-lg resize-none" /></div>
               </div>
             </div>
@@ -465,24 +553,66 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
 
           <div className="lg:col-span-2">
             <div className="bg-zinc-100 rounded-2xl border border-zinc-200 p-6 sticky top-24">
-              <h3 className="font-bold text-zinc-700 text-sm mb-4">Preview</h3>
-              <div className="w-full flex gap-4 overflow-x-auto pb-4 snap-x">
-                {produtosSelecionados.map((prod, index) => (
-                  <div key={prod.id} className="bg-white min-w-[240px] max-w-[240px] rounded-xl shadow-lg border border-zinc-200 overflow-hidden snap-center flex-shrink-0">
-                    <div className="w-full aspect-square bg-zinc-100 relative group">
-                      {prod.image_url ? <img src={prod.image_url} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-zinc-300"><ImageIcon size={48} /></div>}
-                      <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center cursor-pointer text-white text-xs font-bold gap-2"><Edit3 size={24} /> Trocar<input type="file" accept="image/*" className="hidden" onChange={(e) => handleTrocarFotoProduto(index, e)} /></label>
+              <h3 className="font-bold text-zinc-700 text-sm mb-4">Preview do Anúncio</h3>
+              
+              {tipoAnuncio === "carousel" ? (
+                // PREVIEW DO CARROSSEL
+                <div className="w-full flex gap-4 overflow-x-auto pb-4 snap-x">
+                  {produtosSelecionados.map((prod, index) => (
+                    <div key={prod.id} className="bg-white min-w-[240px] max-w-[240px] rounded-xl shadow-lg border border-zinc-200 overflow-hidden snap-center flex-shrink-0">
+                      <div className="w-full aspect-square bg-zinc-100 relative group">
+                        {prod.image_url ? <img src={prod.image_url} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-zinc-300"><ImageIcon size={48} /></div>}
+                        <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center cursor-pointer text-white text-xs font-bold gap-2"><Edit3 size={24} /> Trocar Capa<input type="file" accept="image/*" className="hidden" onChange={(e) => handleTrocarFotoProduto(index, e)} /></label>
+                      </div>
+                      <div className="p-3"><p className="text-xs font-bold line-clamp-1 mb-2">{prod.name}</p><button className="bg-zinc-100 text-zinc-600 font-bold text-xs px-4 py-2 w-full rounded-md border border-zinc-200">Ver Cardápio</button></div>
                     </div>
-                    <div className="p-3"><p className="text-xs font-bold line-clamp-1 mb-2">{prod.name}</p><button className="bg-blue-50 text-blue-600 font-bold text-xs px-4 py-2 w-full rounded-md">Comprar Agora</button></div>
+                  ))}
+                </div>
+              ) : (
+                // PREVIEW DE POST ÚNICO ESTILO FACEBOOK/INSTAGRAM
+                <div className="bg-white max-w-[320px] mx-auto rounded-xl shadow-lg border border-zinc-200 overflow-hidden flex-shrink-0 flex flex-col">
+                  {/* Header do Post */}
+                  <div className="p-3 flex items-center gap-3 border-b border-zinc-100">
+                    <div className="w-10 h-10 bg-zinc-200 rounded-full flex items-center justify-center font-bold text-zinc-500 text-sm overflow-hidden shrink-0 border border-zinc-200">
+                      {tenant?.logo_url ? <img src={tenant.logo_url} className="w-full h-full object-cover"/> : tenant?.name.charAt(0)}
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                      <p className="text-sm font-bold text-zinc-900 leading-tight truncate">{tenant?.name}</p>
+                      <p className="text-[11px] text-zinc-500">Patrocinado • 🌎</p>
+                    </div>
                   </div>
-                ))}
-              </div>
+                  
+                  {/* Texto do Post */}
+                  <div className="p-3 text-sm text-zinc-800 whitespace-pre-line leading-snug">
+                    <span className="font-bold">{anuncioGerado?.hook}</span><br/><br/>{anuncioGerado?.body}
+                  </div>
+                  
+                  {/* Mídia do Post (Vídeo ou Imagem) */}
+                  <div className="w-full aspect-square bg-zinc-950 relative flex items-center justify-center">
+                    {midiaType === 'video' && midiaPreview ? (
+                      <video src={midiaPreview} autoPlay muted loop playsInline className="w-full h-full object-contain" />
+                    ) : (
+                      <img src={midiaPreview || produtosSelecionados[0]?.image_url} className="w-full h-full object-cover" />
+                    )}
+                  </div>
+                  
+                  {/* Rodapé CTA */}
+                  <div className="bg-zinc-50 p-3 flex justify-between items-center border-t border-zinc-200">
+                    <div className="flex-1 pr-2">
+                      <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-0.5">Fazer Pedido Agora</p>
+                      <p className="font-bold text-sm text-zinc-900 leading-tight truncate">{produtosSelecionados[0]?.name}</p>
+                    </div>
+                    <button className="bg-zinc-200 hover:bg-zinc-300 text-zinc-800 font-bold text-xs px-4 py-2 rounded-lg transition-colors shrink-0">Comprar</button>
+                  </div>
+                </div>
+              )}
+
               <button 
                 onClick={publicarNaMeta} 
                 disabled={publicando || (orcamentoTotal/diasVeiculacao < 10) || !cidadeSelecionadaMeta || !paginaSelecionada || !contaSelecionada || !pixelSelecionado} 
-                className="w-full bg-indigo-600 text-white font-black py-4 rounded-xl mt-4 disabled:opacity-50 transition-opacity"
+                className="w-full bg-indigo-600 text-white font-black py-4 rounded-xl mt-6 disabled:opacity-50 transition-opacity flex justify-center items-center gap-2 shadow-lg shadow-indigo-600/20"
               >
-                {publicando ? "Publicando..." : "Publicar Campanha"}
+                {publicando ? <><Loader2 size={20} className="animate-spin"/> Publicando no Gerenciador...</> : "🚀 Publicar Campanha na Meta"}
               </button>
             </div>
           </div>
