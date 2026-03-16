@@ -10,6 +10,7 @@ import CarrinhoLateral from "../../components/CarrinhoLateral";
 import CheckoutModal from "../../components/CheckoutModal";
 import { CartProvider } from "../../components/CartContext";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import Script from "next/script"; // IMPORTAÇÃO OFICIAL DO NEXT.JS PARA SCRIPTS EXTERNOS
 
 export default function VitrineLoja() {
   const params = useParams();
@@ -54,26 +55,6 @@ export default function VitrineLoja() {
     setLoading(false);
   };
 
-  // MÁGICA DO PIXEL 1: Instala o Script e Dispara o PageView
-  useEffect(() => {
-    if (tenant?.meta_pixel_id && typeof window !== "undefined") {
-      // Script oficial do Facebook Pixel
-      !function(f,b,e,v,n,t,s)
-      {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-      n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-      if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-      n.queue=[];t=b.createElement(e);t.async=!0;
-      t.src=v;s=b.getElementsByTagName(e)[0];
-      s.parentNode.insertBefore(t,s)}(window, document,'script',
-      'https://connect.facebook.net/en_US/fbevents.js');
-      
-      // @ts-ignore
-      window.fbq('init', tenant.meta_pixel_id);
-      // @ts-ignore
-      window.fbq('track', 'PageView');
-    }
-  }, [tenant?.meta_pixel_id]);
-
   const scrollEsquerda = () => {
     if (carouselRef.current) {
       carouselRef.current.scrollBy({ left: -300, behavior: 'smooth' });
@@ -113,6 +94,28 @@ export default function VitrineLoja() {
 
   return (
     <CartProvider tenantId={tenant.id}>
+      {/* MÁGICA DO PIXEL 1: INJEÇÃO NATIVA DO NEXT.JS (PAGEVIEW) */}
+      {tenant?.meta_pixel_id && (
+        <Script
+          id="fb-pixel"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              !function(f,b,e,v,n,t,s)
+              {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+              n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+              if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+              n.queue=[];t=b.createElement(e);t.async=!0;
+              t.src=v;s=b.getElementsByTagName(e)[0];
+              s.parentNode.insertBefore(t,s)}(window, document,'script',
+              'https://connect.facebook.net/en_US/fbevents.js');
+              fbq('init', '${tenant.meta_pixel_id}');
+              fbq('track', 'PageView');
+            `,
+          }}
+        />
+      )}
+
       <div className="min-h-screen bg-zinc-50 font-sans pb-20">
         
         <div className="w-full h-40 md:h-64 bg-zinc-200 relative">
