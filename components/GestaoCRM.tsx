@@ -40,21 +40,28 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
   const [autoCupomDesc, setAutoCupomDesc] = useState(15);
   const [salvandoAuto, setSalvandoAuto] = useState(false);
 
-  // MOTOR DE EXTRAÇÃO CIRÚRGICO
+  // MOTOR DE EXTRAÇÃO CIRÚRGICO DE ENDEREÇOS
   const extrairDadosEndereco = (endereco: string) => {
     try {
       const strLimpa = endereco.split('|')[0]; // Tira CEP e Compl
       const partes = strLimpa.split(',');
       if (partes.length >= 3) {
-        return {
-          rua: partes[0].trim(),
-          bairro: partes[2].trim(),
-          cidade: partes.length >= 4 ? partes[3].split('-')[0].trim() : ""
-        };
+        const rua = partes[0].trim();
+        const bairro = partes[2].trim();
+        let cidade = "";
+        let uf = "";
+        if (partes.length >= 4) {
+           const cidUf = partes[3].split('-');
+           cidade = cidUf[0].trim();
+           if (cidUf.length > 1) uf = cidUf[1].trim();
+        }
+        return { rua, bairro, cidade, uf };
       }
     } catch (e) {}
-    return { rua: "", bairro: "Centro", cidade: "" };
+    return { rua: "", bairro: "Centro", cidade: "", uf: "" };
   };
+
+  const normalizar = (str: string) => str ? str.trim().toLowerCase() : "";
 
   const carregarDadosInteligentes = async () => {
     setLoading(true);
@@ -69,6 +76,7 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
     let cidadeLoja = "";
     let centroAtual: [number, number] = [-15.7906, -47.8916];
 
+    // Localiza a cidade base da loja pelo CEP do lojista
     if (lojaConfig?.zip_code) {
       try {
         const resLocal = await fetch(`https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&q=${lojaConfig.zip_code}, Brasil`);
@@ -84,18 +92,52 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
     if (cData && oData) {
       let stats = { vips: 0, risco: 0, perdidos: 0, recemChegados: 0, fimDeSemana: 0, notivagos: 0, almoco: 0, topProduto: "", dinheiroDeixadoNaMesa: 0 };
       let contagemProdutos: Record<string, number> = {};
-      let bairrosAgrupados: Record<string, { count: number, sampleRua: string, cidade: string }> = {};
+      let bairrosAgrupados: Record<string, { count: number, sampleRua: string, cidade: string, uf: string }> = {};
       
       const limiteDiasCalor = new Date();
       limiteDiasCalor.setDate(limiteDiasCalor.getDate() - 30);
 
+      // 1. PROCESSA TODOS OS PEDIDOS PARA O MAPA DE CALOR (INDEPENDENTE DE CLIENTE)
+      oData.forEach(pedido => {
+        if (pedido.status === 'cancelado' || pedido.status === 'excluido') return;
+        const dataPedido = new Date(pedido.created_at);
+
+        // Comportamento Global
+        if ([0, 5, 6].includes(dataPedido.getDay())) stats.fimDeSemana++;
+        if (dataPedido.getHours() >= 20 || dataPedido.getHours() < 4) stats.notivagos++;
+        if (dataPedido.getHours() >= 11 && dataPedido.getHours() <= 14) stats.almoco++;
+
+        // Mapa de Calor
+        if (!pedido.customer_address.toLowerCase().includes("retirada") && dataPedido >= limiteDiasCalor) {
+          const { rua, bairro, cidade, uf } = extrairDadosEndereco(pedido.customer_address);
+          const key = bairro || "Centro"; // Agrupa pelo bairro
+          if (!bairrosAgrupados[key]) bairrosAgrupados[key] = { count: 0, sampleRua: rua, cidade, uf };
+          bairrosAgrupados[key].count += 1;
+        }
+
+        // Produtos Mais Vendidos
+        pedido.order_items?.forEach((item: any) => { 
+          contagemProdutos[item.product_name] = (contagemProdutos[item.product_name] || 0) + item.quantity; 
+        });
+      });
+
+      // 2. PROCESSA A BASE DE CLIENTES (RFM)
       const clientesComRFM = cData.map(cliente => {
-        const pedidosDoCliente = oData.filter(o => o.customer_name === cliente.name && o.status !== 'cancelado' && o.status !== 'excluido');
+        // Encontra os pedidos usando normalização rígida para não perder dados por espaços ou maiúsculas
+        const pedidosDoCliente = oData.filter(o => 
+          normalizar(o.customer_name) === normalizar(cliente.name) && 
+          o.status !== 'cancelado' && 
+          o.status !== 'excluido'
+        );
+        
         const numPedidos = pedidosDoCliente.length;
         const totalGasto = pedidosDoCliente.reduce((acc, p) => acc + Number(p.total_amount), 0);
         const ticketMedio = numPedidos > 0 ? (totalGasto / numPedidos) : 0;
         
-        const ultimoPedido = numPedidos > 0 ? new Date(Math.max(...pedidosDoCliente.map(p => new Date(p.created_at).getTime()))) : new Date(cliente.created_at);
+        const ultimoPedido = numPedidos > 0 
+          ? new Date(Math.max(...pedidosDoCliente.map(p => new Date(p.created_at).getTime()))) 
+          : new Date(cliente.created_at);
+          
         const diasSemComprar = Math.floor((new Date().getTime() - ultimoPedido.getTime()) / (1000 * 3600 * 24));
 
         let perfil = "Regular";
@@ -103,67 +145,56 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
         else if (numPedidos >= 3 && diasSemComprar <= 15) { perfil = "VIP"; stats.vips++; } 
         else if (numPedidos >= 2 && diasSemComprar > 15 && diasSemComprar <= 45) { perfil = "Risco"; stats.risco++; stats.dinheiroDeixadoNaMesa += ticketMedio; } 
         else if (numPedidos >= 1 && diasSemComprar > 45) { perfil = "Perdido"; stats.perdidos++; }
-
-        let pedidosFDS = 0, pedidosNoturnos = 0, pedidosAlmoco = 0;
-
-        pedidosDoCliente.forEach(pedido => {
-          const dataPedido = new Date(pedido.created_at);
-          if ([0, 5, 6].includes(dataPedido.getDay())) pedidosFDS++;
-          if (dataPedido.getHours() >= 20 || dataPedido.getHours() < 4) pedidosNoturnos++;
-          if (dataPedido.getHours() >= 11 && dataPedido.getHours() <= 14) pedidosAlmoco++;
-
-          // Alimenta Mapa de Calor Apenas com Pedidos Recentes e de Entrega
-          if (!pedido.customer_address.toLowerCase().includes("retirada") && dataPedido >= limiteDiasCalor) {
-            const { rua, bairro, cidade } = extrairDadosEndereco(pedido.customer_address);
-            if (!bairrosAgrupados[bairro]) bairrosAgrupados[bairro] = { count: 0, sampleRua: rua, cidade: cidade };
-            bairrosAgrupados[bairro].count += 1;
-          }
-
-          pedido.order_items?.forEach((item: any) => { contagemProdutos[item.product_name] = (contagemProdutos[item.product_name] || 0) + item.quantity; });
-        });
+        else if (numPedidos === 0) { perfil = "Sem Pedidos"; }
 
         const dadosPessoais = extrairDadosEndereco(cliente.address || "");
         return { 
           ...cliente, numPedidos, totalGasto, diasSemComprar, perfil, 
           enderecoLimpo: dadosPessoais.rua || "Não informado", 
-          bairroLimpo: dadosPessoais.bairro,
-          tags: { fds: numPedidos > 0 && (pedidosFDS / numPedidos) >= 0.6, noite: numPedidos > 0 && (pedidosNoturnos / numPedidos) >= 0.5, almoco: numPedidos > 0 && (pedidosAlmoco / numPedidos) >= 0.5 } 
+          bairroLimpo: dadosPessoais.bairro || "Centro"
         };
       });
 
       const topProdArr = Object.entries(contagemProdutos).sort((a, b) => b[1] - a[1]);
       if (topProdArr.length > 0) stats.topProduto = topProdArr[0][0];
 
-      // BUSCA MILIMÉTRICA NO GPS COM TRAVA DE CIDADE
+      // 3. BUSCA MILIMÉTRICA NO GPS (TRAVA DE CIDADE ATIVADA)
       const bairrosOrdenados = Object.entries(bairrosAgrupados).sort((a, b) => b[1].count - a[1].count).slice(0, 15);
       const bairrosMapeados = [];
       
       for (const [bairro, data] of bairrosOrdenados) {
         try {
           const cityToSearch = data.cidade || cidadeLoja;
-          if (!cityToSearch) continue; // Sem cidade base, aborta para não errar
+          if (!cityToSearch) continue; 
           
+          const stateToSearch = data.uf ? `, ${data.uf}` : "";
           let geo = [];
 
-          // TENTATIVA 1: Pesquisa ESTRUTURADA (Obriga a achar a rua DENTRO da cidade especificada)
-          if (data.sampleRua) {
-            const urlRua = `https://nominatim.openstreetmap.org/search?format=json&street=${encodeURIComponent(data.sampleRua)}&city=${encodeURIComponent(cityToSearch)}&country=Brazil`;
-            let res = await fetch(urlRua);
+          // TENTATIVA 1: Busca a Rua exata + Bairro + Cidade + Estado. A pesquisa mais rigorosa possível.
+          if (data.sampleRua && data.sampleRua.toLowerCase() !== "rua") {
+            let q = encodeURIComponent(`${data.sampleRua}, ${bairro}, ${cityToSearch}${stateToSearch}, Brasil`);
+            let res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
+            geo = await res.json();
+            
+            // TENTATIVA 1.5: Se o nome do bairro estiver atrapalhando a rua, tira o bairro.
+            if (geo.length === 0) {
+              q = encodeURIComponent(`${data.sampleRua}, ${cityToSearch}${stateToSearch}, Brasil`);
+              res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
+              geo = await res.json();
+            }
+          }
+
+          // TENTATIVA 2 (Fallback): Não achou a rua (Rua H)? Procura apenas o Bairro na cidade.
+          if (geo.length === 0 && bairro && bairro.toLowerCase() !== "centro") {
+            let q = encodeURIComponent(`${bairro}, ${cityToSearch}${stateToSearch}, Brasil`);
+            let res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
             geo = await res.json();
           }
 
-          // TENTATIVA 2: Se a rua não existir no mapa (CEP genérico), tenta achar o BAIRRO + CIDADE
-          if (geo.length === 0 && bairro) {
-            const urlBairro = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(bairro + ', ' + cityToSearch + ', Brazil')}`;
-            let res = await fetch(urlBairro);
-            geo = await res.json();
-          }
-
-          // TENTATIVA 3 (TRAVA FINAL): Se for um bairro isolado e o mapa não souber onde é, 
-          // jogamos a "bolha de calor" no CENTRO da cidade do Lojista, para não perder o dado e não ir para outro estado.
+          // TENTATIVA 3 (Trava de Segurança): Não achou rua nem bairro? Crava o pino no centro da CIDADE DA LOJA.
           if (geo.length === 0) {
-            const urlCidade = `https://nominatim.openstreetmap.org/search?format=json&city=${encodeURIComponent(cityToSearch)}&country=Brazil`;
-            let res = await fetch(urlCidade);
+            let q = encodeURIComponent(`${cityToSearch}${stateToSearch}, Brasil`);
+            let res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
             geo = await res.json();
           }
 
@@ -183,7 +214,7 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
               lat: parseFloat(geo[0].lat), lng: parseFloat(geo[0].lon)
             });
           }
-          // Delay anti-bloqueio do Nominatim
+          // Pausa leve para não bloquear o satélite gratuito (Nominatim)
           await new Promise(r => setTimeout(r, 400));
         } catch(e) {}
       }
