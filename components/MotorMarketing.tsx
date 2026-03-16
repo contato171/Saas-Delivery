@@ -6,7 +6,7 @@ import { supabase } from "../lib/supabase";
 import { 
   Wand2, Target, Megaphone, Facebook, 
   CheckCircle2, Loader2, Image as ImageIcon,
-  Clock, MapPin, Edit3, DollarSign, Search, Layers
+  Clock, MapPin, Edit3, DollarSign, Search, Layers, ChevronDown, ChevronUp
 } from "lucide-react";
 
 export default function MotorMarketing({ tenantId }: { tenantId: string }) {
@@ -32,8 +32,15 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
 
   const [etapa, setEtapa] = useState<1 | 2 | 3>(1);
   
-  // NOVO: Busca de produtos
+  // Busca de produtos e Estado da Sanfona
   const [buscaProduto, setBuscaProduto] = useState("");
+  const [categoriasAbertas, setCategoriasAbertas] = useState<Record<string, boolean>>(() => {
+    if (typeof window !== "undefined") {
+      const salvo = localStorage.getItem(`@saas_marketing_categorias_${tenantId}`);
+      if (salvo) return JSON.parse(salvo);
+    }
+    return {};
+  });
   
   const [buscaCidade, setBuscaCidade] = useState("");
   const [resultadosBuscaCidade, setResultadosBuscaCidade] = useState<any[]>([]);
@@ -54,7 +61,6 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
       const { data: tenantData } = await supabase.from("tenants").select("*").eq("id", tenantId).single();
       if (tenantData) setTenant(tenantData);
 
-      // ATUALIZADO: Agora puxa o nome da categoria junto com o produto
       const { data: prodData } = await supabase.from("products").select("*, categories(name)").eq("tenant_id", tenantId).order("name");
       if (prodData) setProdutos(prodData);
       
@@ -116,6 +122,14 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
       if (produtosSelecionados.length < 5) setProdutosSelecionados([...produtosSelecionados, prod]);
       else alert("Selecione no máximo 5 produtos para o carrossel.");
     }
+  };
+
+  const toggleCategoriaVisivel = (categoriaNome: string) => {
+    setCategoriasAbertas(prev => {
+      const novoEstado = { ...prev, [categoriaNome]: !prev[categoriaNome] };
+      localStorage.setItem(`@saas_marketing_categorias_${tenantId}`, JSON.stringify(novoEstado));
+      return novoEstado;
+    });
   };
 
   const gerarAnuncioIA = async () => {
@@ -273,7 +287,6 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
               <p className="text-sm text-zinc-500">Selecione de 2 a 5 produtos para criar um anúncio em Carrossel.</p>
             </div>
             
-            {/* NOVA BARRA DE BUSCA */}
             <div className="relative w-full md:w-72">
               <Search className="absolute left-3 top-3 text-zinc-400" size={18} />
               <input 
@@ -286,40 +299,54 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
             </div>
           </div>
 
-          <div className="p-6">
+          <div className="p-6 space-y-6">
             {Object.keys(produtosAgrupados).length === 0 ? (
                <p className="text-center py-10 text-zinc-500">Nenhum produto encontrado.</p>
             ) : (
-              Object.keys(produtosAgrupados).sort().map(categoria => (
-                <div key={categoria} className="mb-8 last:mb-0">
-                  {/* TÍTULO DA CATEGORIA */}
-                  <h3 className="font-black text-zinc-800 uppercase tracking-wider text-sm mb-4 border-b border-zinc-100 pb-2">
-                    {categoria} <span className="text-zinc-400 text-[10px] ml-1">({produtosAgrupados[categoria].length})</span>
-                  </h3>
-                  
-                  {/* GRID DE PRODUTOS */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                    {produtosAgrupados[categoria].map(prod => {
-                      const selecionado = produtosSelecionados.find(p => p.id === prod.id);
-                      return (
-                        <div key={prod.id} onClick={() => toggleProduto(prod)} className={`border-2 rounded-xl p-4 cursor-pointer transition-all flex gap-3 ${selecionado ? 'border-purple-600 bg-purple-50/30' : 'border-zinc-200 hover:border-zinc-300'}`}>
-                          <div className="w-16 h-16 bg-zinc-100 rounded-lg overflow-hidden shrink-0 border border-zinc-200">
-                            {prod.image_url ? <img src={prod.image_url} alt={prod.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-zinc-300"><ImageIcon size={24}/></div>}
-                          </div>
-                          <div className="flex flex-col justify-center flex-1">
-                            <h3 className="font-bold text-sm leading-tight line-clamp-2 mb-1">{prod.name}</h3>
-                            <p className="text-purple-700 font-black text-sm">R$ {Number(prod.price).toFixed(2).replace('.', ',')}</p>
-                          </div>
-                        </div>
-                      );
-                    })}
+              Object.keys(produtosAgrupados).sort().map(categoria => {
+                const estaAberta = categoriasAbertas[categoria];
+                
+                return (
+                  <div key={categoria} className="bg-white rounded-xl border border-zinc-200 overflow-hidden shadow-sm transition-all">
+                    {/* SANFONA - CABEÇALHO */}
+                    <div 
+                      onClick={() => toggleCategoriaVisivel(categoria)}
+                      className="bg-zinc-50/80 px-6 py-4 border-b border-zinc-200 flex justify-between items-center cursor-pointer hover:bg-zinc-100 transition-colors"
+                    >
+                      <h3 className="font-black text-zinc-800 uppercase tracking-wider text-sm flex items-center gap-2">
+                        {categoria} <span className="bg-zinc-200 text-zinc-600 text-[10px] px-2 py-0.5 rounded-full">{produtosAgrupados[categoria].length}</span>
+                      </h3>
+                      <button className="text-zinc-500">
+                        {estaAberta ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                      </button>
+                    </div>
+
+                    {/* SANFONA - CORPO */}
+                    {estaAberta && (
+                      <div className="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 animate-in slide-in-from-top-2">
+                        {produtosAgrupados[categoria].map(prod => {
+                          const selecionado = produtosSelecionados.find(p => p.id === prod.id);
+                          return (
+                            <div key={prod.id} onClick={() => toggleProduto(prod)} className={`border-2 rounded-xl p-4 cursor-pointer transition-all flex gap-3 ${selecionado ? 'border-purple-600 bg-purple-50/30' : 'border-zinc-200 hover:border-zinc-300'}`}>
+                              <div className="w-16 h-16 bg-zinc-100 rounded-lg overflow-hidden shrink-0 border border-zinc-200">
+                                {prod.image_url ? <img src={prod.image_url} alt={prod.name} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-zinc-300"><ImageIcon size={24}/></div>}
+                              </div>
+                              <div className="flex flex-col justify-center flex-1">
+                                <h3 className="font-bold text-sm leading-tight line-clamp-2 mb-1">{prod.name}</h3>
+                                <p className="text-purple-700 font-black text-sm">R$ {Number(prod.price).toFixed(2).replace('.', ',')}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
           
-          <div className="p-6 border-t border-zinc-100 bg-zinc-50/50 flex items-center justify-between sticky bottom-0">
+          <div className="p-6 border-t border-zinc-100 bg-zinc-50/50 flex items-center justify-between sticky bottom-0 z-10 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)]">
             <div className="font-bold">{produtosSelecionados.length} selecionados</div>
             <button onClick={gerarAnuncioIA} disabled={produtosSelecionados.length < 2} className="bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed">Configurar Campanha</button>
           </div>
