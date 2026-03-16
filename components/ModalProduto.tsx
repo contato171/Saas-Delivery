@@ -4,7 +4,6 @@
 import { useState, useEffect } from "react";
 import { useCart } from "./CartContext";
 import { supabase } from "../lib/supabase";
-// O CheckCircle2 foi adicionado na linha abaixo!
 import { X, Plus, Minus, ShoppingBag, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 
 export default function ModalProduto({ produto, tenantId, onClose }: { produto: any, tenantId: string, onClose: () => void }) {
@@ -31,6 +30,21 @@ export default function ModalProduto({ produto, tenantId, onClose }: { produto: 
     }
     buscarGrupos();
   }, [produto.id]);
+
+  // MÁGICA DO PIXEL 2: ViewContent (Apenas quando abre o modal)
+  useEffect(() => {
+    // @ts-ignore
+    if (typeof window !== "undefined" && window.fbq) {
+      // @ts-ignore
+      window.fbq('track', 'ViewContent', {
+        content_name: produto.name,
+        content_ids: [produto.id],
+        content_type: 'product',
+        value: Number(produto.price),
+        currency: 'BRL'
+      });
+    }
+  }, [produto]);
 
   const alterarSelecao = (grupo: any, item: any, operacao: 'add' | 'remove') => {
     const atualDoItem = selecoes[item.id] || 0;
@@ -80,6 +94,20 @@ export default function ModalProduto({ produto, tenantId, onClose }: { produto: 
 
   const handleAdicionarAoCarrinho = () => {
     if (!isPodeAdicionar) return alert("Por favor, preencha as opções obrigatórias.");
+    
+    // MÁGICA DO PIXEL 3: AddToCart
+    // @ts-ignore
+    if (typeof window !== "undefined" && window.fbq) {
+      // @ts-ignore
+      window.fbq('track', 'AddToCart', {
+        content_name: produto.name,
+        content_ids: [produto.id],
+        content_type: 'product',
+        value: valorFinalTela,
+        currency: 'BRL'
+      });
+    }
+
     if (adicionarProduto) {
       adicionarProduto(produto, quantidadeGlobal, listaFormatadaParaCarrinho, observacao);
       onClose();

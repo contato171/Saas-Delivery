@@ -24,7 +24,6 @@ export default function VitrineLoja() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
-  // Ref para as setas do carrossel
   const carouselRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -54,6 +53,26 @@ export default function VitrineLoja() {
     }
     setLoading(false);
   };
+
+  // MÁGICA DO PIXEL 1: Instala o Script e Dispara o PageView
+  useEffect(() => {
+    if (tenant?.meta_pixel_id && typeof window !== "undefined") {
+      // Script oficial do Facebook Pixel
+      !function(f,b,e,v,n,t,s)
+      {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+      n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+      if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+      n.queue=[];t=b.createElement(e);t.async=!0;
+      t.src=v;s=b.getElementsByTagName(e)[0];
+      s.parentNode.insertBefore(t,s)}(window, document,'script',
+      'https://connect.facebook.net/en_US/fbevents.js');
+      
+      // @ts-ignore
+      window.fbq('init', tenant.meta_pixel_id);
+      // @ts-ignore
+      window.fbq('track', 'PageView');
+    }
+  }, [tenant?.meta_pixel_id]);
 
   const scrollEsquerda = () => {
     if (carouselRef.current) {
@@ -86,8 +105,6 @@ export default function VitrineLoja() {
 
   let categoriasUnicas = Array.from(new Set(produtosFiltrados.map(p => p.categories?.name || "Gerais")));
 
-  // MÁGICA 1: Ordena as categorias automaticamente pelo produto mais caro dentro delas!
-  // Isso garante que Pratos Principais, Combos e Pizzas subam pro topo, enquanto Bebidas e Doces desçam.
   categoriasUnicas.sort((catA, catB) => {
     const maxPrecoA = Math.max(...produtosFiltrados.filter(p => (p.categories?.name || "Gerais") === catA).map(p => Number(p.price) || 0));
     const maxPrecoB = Math.max(...produtosFiltrados.filter(p => (p.categories?.name || "Gerais") === catB).map(p => Number(p.price) || 0));
@@ -140,7 +157,6 @@ export default function VitrineLoja() {
             />
           </div>
 
-          {/* MÁGICA 2: Setas de Navegação no Carrossel */}
           {destaques.length > 0 && busca === "" && (
             <div className="mb-12 relative group">
               <div className="flex justify-between items-end mb-4">
