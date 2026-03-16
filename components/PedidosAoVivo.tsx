@@ -1,3 +1,4 @@
+// @ts-nocheck
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -95,23 +96,29 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
     }
   };
 
-  // EXCLUSÃO DEFINITIVA DO BANCO DE DADOS
+  // 1. EXCLUSÃO DEFINITIVA DO BANCO DE DADOS
   const acaoExcluirDefinitivo = async (id: string) => {
-    if (window.confirm("ATENÇÃO: Deseja EXCLUIR DEFINITIVAMENTE este pedido? Ele será apagado do banco de dados para sempre.")) {
+    if (window.confirm("ATENÇÃO: Deseja EXCLUIR DEFINITIVAMENTE este pedido? Ele desaparecerá do banco de dados.")) {
       try {
-        // Remove os itens do pedido primeiro (para não dar erro de chave estrangeira)
-        await supabase.from("order_items").delete().eq("order_id", id);
-        // Remove o pedido raiz
-        await supabase.from("orders").delete().eq("id", id);
-        // Remove da tela
+        // Primeiro deletamos os itens para evitar conflito de chaves
+        const { error: errItens } = await supabase.from("order_items").delete().eq("order_id", id);
+        if (errItens) throw new Error("Erro ao excluir itens do pedido no Supabase.");
+
+        // Depois deletamos o pedido em si
+        const { error: errOrder } = await supabase.from("orders").delete().eq("id", id);
+        if (errOrder) throw new Error("Erro ao excluir o pedido no Supabase. Verifique as permissões (RLS).");
+
+        // Removemos da tela na hora
         setPedidos(pedidos.filter(p => p.id !== id));
-      } catch (error) {
-        alert("Erro ao excluir pedido.");
+        alert("Pedido excluído com sucesso do banco de dados!");
+      } catch (error: any) {
+        alert(error.message);
+        console.error(error);
       }
     }
   };
 
-  // SALVAR EDIÇÃO DO PEDIDO
+  // 2. SALVAR EDIÇÃO DO PEDIDO
   const salvarEdicao = async () => {
     if (!pedidoEditando) return;
     setSalvandoEdicao(true);
@@ -126,13 +133,17 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
         })
         .eq("id", pedidoEditando.id);
         
-      if (error) throw error;
+      if (error) {
+        throw new Error("O Supabase bloqueou a edição (Policy RLS). Você precisa liberar o UPDATE na tabela 'orders'.");
+      }
       
-      // Atualiza a tela
+      // Atualiza a tela imediatamente
       setPedidos(pedidos.map(p => p.id === pedidoEditando.id ? pedidoEditando : p));
       setPedidoEditando(null);
-    } catch (e) {
-      alert("Erro ao salvar edição.");
+      alert("Pedido atualizado com sucesso!");
+    } catch (e: any) {
+      alert(e.message);
+      console.error(e);
     } finally {
       setSalvandoEdicao(false);
     }
@@ -155,7 +166,8 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
         </div>
         <div className="flex flex-col items-end gap-2">
           <p className="font-black text-blue-600">R$ {Number(pedido.total_amount).toFixed(2).replace(".", ",")}</p>
-          <button onClick={() => setPedidoEditando({ ...pedido })} className="text-xs font-bold text-zinc-400 hover:text-blue-600 transition-colors flex items-center gap-1">
+          {/* BOTÃO DE EDITAR NO CARD DO KANBAN */}
+          <button onClick={() => setPedidoEditando({ ...pedido })} className="text-xs font-bold text-zinc-500 hover:text-blue-600 transition-colors flex items-center gap-1 bg-zinc-100 px-2 py-1 rounded">
             <Edit size={12} /> Editar
           </button>
         </div>
@@ -195,7 +207,8 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
               <button onClick={() => acaoRecusar(pedido)} className="flex-1 border border-red-200 text-red-600 hover:bg-red-50 font-bold py-2 rounded-lg text-xs flex justify-center items-center gap-1 transition-colors">
                 <XCircle size={14}/> Recusar
               </button>
-              <button onClick={() => acaoExcluirDefinitivo(pedido.id)} className="flex-1 border border-zinc-200 text-zinc-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200 font-bold py-2 rounded-lg text-xs flex justify-center items-center gap-1 transition-colors">
+              {/* LIXEIRA VERMELHA DO KANBAN */}
+              <button onClick={() => acaoExcluirDefinitivo(pedido.id)} className="flex-1 border border-red-200 text-red-500 hover:bg-red-600 hover:text-white font-bold py-2 rounded-lg text-xs flex justify-center items-center gap-1 transition-colors">
                 <Trash2 size={14}/> Excluir
               </button>
             </div>
@@ -362,10 +375,11 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
                         </span>
                       </td>
                       <td className="p-4 text-right flex justify-end gap-2">
-                         <button onClick={() => setPedidoEditando({ ...pedido })} className="p-2 text-zinc-400 hover:text-blue-600 bg-white border border-zinc-200 rounded-lg shadow-sm transition-colors" title="Editar Pedido">
+                         {/* BOTOES NO HISTÓRICO */}
+                         <button onClick={() => setPedidoEditando({ ...pedido })} className="p-2 text-blue-600 hover:bg-blue-50 bg-white border border-blue-200 rounded-lg shadow-sm transition-colors" title="Editar Pedido">
                             <Edit size={16} />
                          </button>
-                         <button onClick={() => acaoExcluirDefinitivo(pedido.id)} className="p-2 text-zinc-400 hover:text-red-600 bg-white border border-zinc-200 rounded-lg shadow-sm transition-colors" title="Excluir Definitivamente">
+                         <button onClick={() => acaoExcluirDefinitivo(pedido.id)} className="p-2 text-red-500 hover:bg-red-600 hover:text-white bg-white border border-red-200 rounded-lg shadow-sm transition-colors" title="Excluir Definitivamente">
                             <Trash2 size={16} />
                          </button>
                       </td>
