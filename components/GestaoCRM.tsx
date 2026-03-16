@@ -7,7 +7,8 @@ import dynamic from 'next/dynamic';
 import { 
   Users, BrainCircuit, Zap, Search, Plus, DollarSign, 
   AlertCircle, Award, Clock, Tag, CheckCircle2, XCircle, 
-  TrendingUp, Play, Pause, CalendarDays, Moon, Edit, Sun, Map
+  TrendingUp, Play, Pause, CalendarDays, Moon, Edit, Sun, Map,
+  Trophy, Download
 } from "lucide-react";
 
 // Mapa dinâmico
@@ -40,10 +41,15 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
   const [autoCupomDesc, setAutoCupomDesc] = useState(15);
   const [salvandoAuto, setSalvandoAuto] = useState(false);
 
-  // MOTOR DE EXTRAÇÃO CIRÚRGICO DE ENDEREÇOS
+  // MOTOR DE EXTRAÇÃO CIRÚRGICO DE ENDEREÇOS ATUALIZADO (AGORA PUXA O CEP PARA O CSV)
   const extrairDadosEndereco = (endereco: string) => {
     try {
-      const strLimpa = endereco.split('|')[0]; // Tira CEP e Compl
+      let cep = "";
+      if (endereco.includes("CEP:")) {
+        cep = endereco.split("CEP:")[1].split("|")[0].trim();
+      }
+      
+      const strLimpa = endereco.split('|')[0]; // Tira CEP e Compl da string principal
       const partes = strLimpa.split(',');
       if (partes.length >= 3) {
         const rua = partes[0].trim();
@@ -55,10 +61,10 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
            cidade = cidUf[0].trim();
            if (cidUf.length > 1) uf = cidUf[1].trim();
         }
-        return { rua, bairro, cidade, uf };
+        return { rua, bairro, cidade, uf, cep };
       }
     } catch (e) {}
-    return { rua: "", bairro: "Centro", cidade: "", uf: "" };
+    return { rua: "", bairro: "Centro", cidade: "", uf: "", cep: "" };
   };
 
   const normalizar = (str: string) => str ? str.trim().toLowerCase() : "";
@@ -76,7 +82,6 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
     let cidadeLoja = "";
     let centroAtual: [number, number] = [-15.7906, -47.8916];
 
-    // Localiza a cidade base da loja pelo CEP do lojista
     if (lojaConfig?.zip_code) {
       try {
         const resLocal = await fetch(`https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&q=${lojaConfig.zip_code}, Brasil`);
@@ -97,33 +102,27 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
       const limiteDiasCalor = new Date();
       limiteDiasCalor.setDate(limiteDiasCalor.getDate() - 30);
 
-      // 1. PROCESSA TODOS OS PEDIDOS PARA O MAPA DE CALOR (INDEPENDENTE DE CLIENTE)
       oData.forEach(pedido => {
         if (pedido.status === 'cancelado' || pedido.status === 'excluido') return;
         const dataPedido = new Date(pedido.created_at);
 
-        // Comportamento Global
         if ([0, 5, 6].includes(dataPedido.getDay())) stats.fimDeSemana++;
         if (dataPedido.getHours() >= 20 || dataPedido.getHours() < 4) stats.notivagos++;
         if (dataPedido.getHours() >= 11 && dataPedido.getHours() <= 14) stats.almoco++;
 
-        // Mapa de Calor
         if (!pedido.customer_address.toLowerCase().includes("retirada") && dataPedido >= limiteDiasCalor) {
           const { rua, bairro, cidade, uf } = extrairDadosEndereco(pedido.customer_address);
-          const key = bairro || "Centro"; // Agrupa pelo bairro
+          const key = bairro || "Centro"; 
           if (!bairrosAgrupados[key]) bairrosAgrupados[key] = { count: 0, sampleRua: rua, cidade, uf };
           bairrosAgrupados[key].count += 1;
         }
 
-        // Produtos Mais Vendidos
         pedido.order_items?.forEach((item: any) => { 
           contagemProdutos[item.product_name] = (contagemProdutos[item.product_name] || 0) + item.quantity; 
         });
       });
 
-      // 2. PROCESSA A BASE DE CLIENTES (RFM)
       const clientesComRFM = cData.map(cliente => {
-        // Encontra os pedidos usando normalização rígida para não perder dados por espaços ou maiúsculas
         const pedidosDoCliente = oData.filter(o => 
           normalizar(o.customer_name) === normalizar(cliente.name) && 
           o.status !== 'cancelado' && 
@@ -158,7 +157,6 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
       const topProdArr = Object.entries(contagemProdutos).sort((a, b) => b[1] - a[1]);
       if (topProdArr.length > 0) stats.topProduto = topProdArr[0][0];
 
-      // 3. BUSCA MILIMÉTRICA NO GPS (TRAVA DE CIDADE ATIVADA)
       const bairrosOrdenados = Object.entries(bairrosAgrupados).sort((a, b) => b[1].count - a[1].count).slice(0, 15);
       const bairrosMapeados = [];
       
@@ -170,13 +168,11 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
           const stateToSearch = data.uf ? `, ${data.uf}` : "";
           let geo = [];
 
-          // TENTATIVA 1: Busca a Rua exata + Bairro + Cidade + Estado. A pesquisa mais rigorosa possível.
           if (data.sampleRua && data.sampleRua.toLowerCase() !== "rua") {
             let q = encodeURIComponent(`${data.sampleRua}, ${bairro}, ${cityToSearch}${stateToSearch}, Brasil`);
             let res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
             geo = await res.json();
             
-            // TENTATIVA 1.5: Se o nome do bairro estiver atrapalhando a rua, tira o bairro.
             if (geo.length === 0) {
               q = encodeURIComponent(`${data.sampleRua}, ${cityToSearch}${stateToSearch}, Brasil`);
               res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
@@ -184,14 +180,12 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
             }
           }
 
-          // TENTATIVA 2 (Fallback): Não achou a rua (Rua H)? Procura apenas o Bairro na cidade.
           if (geo.length === 0 && bairro && bairro.toLowerCase() !== "centro") {
             let q = encodeURIComponent(`${bairro}, ${cityToSearch}${stateToSearch}, Brasil`);
             let res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
             geo = await res.json();
           }
 
-          // TENTATIVA 3 (Trava de Segurança): Não achou rua nem bairro? Crava o pino no centro da CIDADE DA LOJA.
           if (geo.length === 0) {
             let q = encodeURIComponent(`${cityToSearch}${stateToSearch}, Brasil`);
             let res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
@@ -214,13 +208,14 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
               lat: parseFloat(geo[0].lat), lng: parseFloat(geo[0].lon)
             });
           }
-          // Pausa leve para não bloquear o satélite gratuito (Nominatim)
           await new Promise(r => setTimeout(r, 400));
         } catch(e) {}
       }
 
       setMapaCalorDados(bairrosMapeados);
       setSegmentos(stats);
+      
+      // O Array principal que alimenta todas as tabelas é ordenado por Gasto Total
       setClientesProcessados(clientesComRFM.sort((a, b) => b.totalGasto - a.totalGasto)); 
     }
     setLoading(false);
@@ -262,6 +257,40 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
     carregarDadosInteligentes();
   };
 
+  // MOTOR DE EXPORTAÇÃO CSV
+  const exportarCSV = () => {
+    // Cabeçalho da planilha
+    const headers = ["Nome", "E-mail", "Telefone", "Rua", "Bairro", "Cidade", "UF", "CEP", "Num de Pedidos", "Total Gasto (R$)"];
+    
+    const linhas = clientesProcessados.map(c => {
+       const end = extrairDadosEndereco(c.address || "");
+       // Separador Ponto e Vírgula (;) para o Excel em português abrir as colunas certinho
+       return [
+         `"${c.name || ''}"`,
+         `""`, // Coluna de Email em branco para o lojista preencher depois se quiser
+         `"${c.phone || ''}"`,
+         `"${end.rua || ''}"`,
+         `"${end.bairro || ''}"`,
+         `"${end.cidade || ''}"`,
+         `"${end.uf || ''}"`,
+         `"${end.cep || ''}"`,
+         c.numPedidos,
+         c.totalGasto.toFixed(2).replace('.', ',')
+       ].join(";");
+    });
+
+    const csvContent = headers.join(";") + "\n" + linhas.join("\n");
+    // O prefixo \uFEFF força o Excel a reconhecer os acentos do português (UTF-8)
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "base_de_clientes_saas.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const clientesFiltrados = clientesProcessados.filter(c => c.name.toLowerCase().includes(pesquisa.toLowerCase()) || c.phone.includes(pesquisa));
 
   return (
@@ -273,9 +302,11 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
         </div>
       </div>
 
+      {/* MENU DE ABAS ATUALIZADO */}
       <div className="flex gap-6 border-b border-zinc-200 overflow-x-auto">
         <button onClick={() => setAbaCrm("rfm")} className={`pb-3 font-semibold text-sm transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap ${abaCrm === "rfm" ? "border-blue-600 text-blue-700" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}><BrainCircuit size={18} /> Inteligência Geográfica</button>
         <button onClick={() => setAbaCrm("clientes")} className={`pb-3 font-semibold text-sm transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap ${abaCrm === "clientes" ? "border-blue-600 text-blue-700" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}><Users size={18} /> Base de Clientes</button>
+        <button onClick={() => setAbaCrm("ranking")} className={`pb-3 font-semibold text-sm transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap ${abaCrm === "ranking" ? "border-blue-600 text-blue-700" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}><Trophy size={18} /> Ranking (Top Clientes)</button>
         <button onClick={() => setAbaCrm("automacoes")} className={`pb-3 font-semibold text-sm transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap ${abaCrm === "automacoes" ? "border-blue-600 text-blue-700" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}><Zap size={18} /> Gatilhos de Venda</button>
       </div>
 
@@ -375,6 +406,56 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
                       </td>
                     </tr>
                   ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* NOVA ABA: RANKING E EXPORTAÇÃO CSV */}
+      {abaCrm === "ranking" && (
+        <div className="bg-white border border-zinc-200 rounded-xl shadow-sm overflow-hidden animate-in fade-in">
+          <div className="p-6 border-b border-zinc-200 bg-zinc-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-bold text-zinc-900 flex items-center gap-2"><Trophy size={20} className="text-yellow-500" /> Ranking de Clientes</h2>
+              <p className="text-sm text-zinc-500 mt-1">Veja quem são os seus melhores clientes e exporte os dados para marketing.</p>
+            </div>
+            <button onClick={exportarCSV} className="bg-zinc-900 hover:bg-zinc-800 text-white font-bold py-2.5 px-5 rounded-lg text-sm transition-colors flex items-center gap-2">
+              <Download size={16} /> Exportar CSV Completo
+            </button>
+          </div>
+          
+          {loading ? <div className="p-10 text-center text-zinc-500 font-medium flex items-center justify-center gap-2"><Clock size={20} className="animate-spin" /> Rankeando clientes...</div> : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-white text-xs text-zinc-500 uppercase tracking-wider border-b border-zinc-200">
+                    <th className="p-4 font-semibold text-center w-24">Posição</th>
+                    <th className="p-4 font-semibold">Cliente / Contato</th>
+                    <th className="p-4 font-semibold text-center">Nº de Pedidos</th>
+                    <th className="p-4 font-semibold">Ticket Médio</th>
+                    <th className="p-4 font-semibold text-right">Total Gasto</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100 text-sm">
+                  {clientesProcessados.filter(c => c.numPedidos > 0).map((cliente, index) => (
+                    <tr key={cliente.id} className="hover:bg-zinc-50 transition-colors">
+                      <td className="p-4 font-black text-zinc-400 text-lg text-center">
+                        {index + 1}º
+                        {index === 0 && <Trophy size={16} className="inline ml-1 text-yellow-500 mb-1" />}
+                        {index === 1 && <Trophy size={16} className="inline ml-1 text-zinc-400 mb-1" />}
+                        {index === 2 && <Trophy size={16} className="inline ml-1 text-orange-400 mb-1" />}
+                      </td>
+                      <td className="p-4"><p className="font-bold text-zinc-900">{cliente.name}</p><p className="text-xs text-zinc-500 mt-0.5">{cliente.phone}</p></td>
+                      <td className="p-4 text-center font-bold text-zinc-700">{cliente.numPedidos}</td>
+                      <td className="p-4 text-zinc-600 font-medium">R$ {(cliente.totalGasto / cliente.numPedidos).toFixed(2).replace(".", ",")}</td>
+                      <td className="p-4 text-right"><p className="font-black text-emerald-600 text-base">R$ {cliente.totalGasto.toFixed(2).replace(".", ",")}</p></td>
+                    </tr>
+                  ))}
+                  {clientesProcessados.filter(c => c.numPedidos > 0).length === 0 && (
+                    <tr><td colSpan={5} className="p-8 text-center text-zinc-500 font-medium">Nenhum pedido registrado ainda.</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
