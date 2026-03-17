@@ -33,7 +33,6 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   const [enderecoAtivo, setEnderecoAtivo] = useState("");
   const [modoEndereco, setModoEndereco] = useState<"padrao" | "novo">("padrao");
 
-  // Formulário Novo Endereço com Lógica de CEP Genérico
   const [buscandoCep, setBuscandoCep] = useState(false); 
   const [cepGenerico, setCepGenerico] = useState(false);
   const [novoCep, setNewCep] = useState(""); 
@@ -50,7 +49,6 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   const [erroMapa, setErroMapa] = useState("");
   const [sugestoesInteligentes, setSugestoesInteligentes] = useState<any[]>([]);
 
-  // Lógica de CRM
   const salvarNoCRM = async (nome: string, telefone: string, endereco: string) => {
     try {
       const tenantId = itens[0].produto.tenant_id;
@@ -206,6 +204,22 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
         return { order_id: pedidoSalvo.id, product_name: item.produto.name, quantity: item.quantidade, unit_price: item.produto.price, options_text: textoOpcoes };
       });
       await supabase.from("order_items").insert(itensParaSalvar);
+
+      // ========================================================
+      // MÁGICA DO PIXEL 5: O EVENTO DE COMPRA (PURCHASE)
+      // Aqui a Meta registra o valor de faturamento gerado pelas campanhas!
+      // ========================================================
+      // @ts-ignore
+      if (typeof window !== "undefined" && window.fbq) {
+        // @ts-ignore
+        window.fbq('track', 'Purchase', {
+          value: totalGeral,
+          currency: 'BRL',
+          content_ids: itens.map((i: any) => i.produto.id),
+          content_type: 'product',
+          num_items: itens.length
+        });
+      }
 
       let textoPedido = `*NOVO PEDIDO!* 🚀\n*ID:* #${pedidoSalvo.id.split('-')[0].toUpperCase()}\n\n*Cliente:* ${nomeCliente}\n*Contato:* ${telefoneCliente}\n*Tipo:* ${tipoEntrega === 'entrega' ? '🛵 Entrega' : '🏃‍♂️ Retirada'}\n`;
       if (tipoEntrega === 'entrega') { textoPedido += `*Endereço:* ${enderecoFinal}\n`; if (distanciaReal) textoPedido += `*Distância:* ${distanciaReal.toFixed(1)} km\n`; }
