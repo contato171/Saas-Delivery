@@ -1,6 +1,7 @@
 // @ts-nocheck
 "use client";
 
+import GestaoIntegracoes from "../../components/GestaoIntegracoes";
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
 import MotorMarketing from "../../components/MotorMarketing";
@@ -300,6 +301,7 @@ export default function PainelLojista() {
         </div>
         
         <nav className="mt-6 flex flex-col gap-1 px-3 flex-1 overflow-y-auto">
+          <button onClick={() => mudarAba("integracoes")} className={`text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${abaAtiva === "integracoes" ? "bg-blue-50 text-blue-700" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}><span className="text-lg">🔌</span> Integrações</button>
           <button onClick={() => mudarAba("inicio")} className={`text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${abaAtiva === "inicio" ? "bg-blue-50 text-blue-700" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}><span className="text-lg">🏠</span> Início</button>
           <div className="my-2 border-t border-zinc-100"></div>
           <button onClick={() => mudarAba("pedidos")} className={`text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-3 ${abaAtiva === "pedidos" ? "bg-blue-50 text-blue-700" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}><span className="text-lg">🧾</span> Pedidos</button>
@@ -362,6 +364,12 @@ export default function PainelLojista() {
           </div>
         )}
         
+        {abaAtiva === "integracoes" && tenant && (
+  <div className="w-full max-w-6xl animate-in fade-in">
+    <GestaoIntegracoes tenantId={tenant.id} />
+  </div>
+)}
+
         {abaAtiva === "crm" && tenant && (
           <div className="w-full max-w-6xl animate-in fade-in">
             {/* @ts-ignore */}
