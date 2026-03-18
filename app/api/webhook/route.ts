@@ -1,51 +1,76 @@
+import { NextResponse } from "next/server";
+import Stripe from "stripe";
+import { createClient } from "@supabase/supabase-js";
+
 export const dynamic = 'force-dynamic';
 
-import { stripe } from "../../../lib/stripe";
-import { NextResponse } from "next/server";
-import { headers } from "next/headers";
-import { createClient } from "@supabase/supabase-js"; 
-
 export async function POST(req: Request) {
-  try {
-    const body = await req.text();
-    const headersList = await headers();
-    const signature = headersList.get("Stripe-Signature") as string;
+  // A MÁGICA: Inicializa as chaves apenas quando a requisição acontece
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
+    apiVersion: "2023-10-16" as any,
+  });
 
-    let event;
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL as string,
+    process.env.SUPABASE_SERVICE_ROLE_KEY as string
+  );
+
+  const body = await req.text();
+  const signature = req.headers.get("Stripe-Signature") as string;
+
+  let event: Stripe.Event;
+
+  try {
+    event = stripe.webhooks.constructEvent(
+      body,
+      signature,
+      process.env.STRIPE_WEBHOOK_SECRET as string
+    );
+  } catch (err: any) {
+    console.error(`Falha na verificação do Webhook:`, err.message);
+    return new NextResponse(`Erro no Webhook: ${err.message}`, { status: 400 });
+  }
+
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object as Stripe.Checkout.Session;
+    const metadata = session.metadata;
+
+    if (!metadata || !metadata.tenantId) {
+      return new NextResponse("Metadados ausentes", { status: 400 });
+    }
+
+    const tenantId = metadata.tenantId;
 
     try {
-      event = stripe.webhooks.constructEvent(
-        body,
-        signature,
-        process.env.STRIPE_WEBHOOK_SECRET || "segredo_falso"
-      );
-    } catch (error: any) {
-      return new NextResponse(`Webhook Error: ${error.message}`, { status: 400 });
-    }
-
-    if (event.type === "checkout.session.completed") {
-      const session = event.data.object as any;
-      const tenantId = session.metadata?.tenantId; 
-
-      if (tenantId) {
-        const supabaseAdmin = createClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL || "https://falso.supabase.co",
-          process.env.SUPABASE_SERVICE_ROLE_KEY || "chave_falsa" 
-        );
+      if (metadata.type === "topup") {
+        const valorRecarga = parseFloat(metadata.amount || "0");
         
+        const { data: tenant } = await supabaseAdmin
+          .from("tenants")
+          .select("wallet_balance")
+          .eq("id", tenantId)
+          .single();
+
+        const saldoAtual = tenant?.wallet_balance || 0;
+        const novoSaldo = saldoAtual + valorRecarga;
+
         await supabaseAdmin
           .from("tenants")
-          .update({ 
-            plan_tier: "pro", 
-            stripe_customer_id: session.customer,
-            stripe_subscription_id: session.subscription
-          })
+          .update({ wallet_balance: novoSaldo })
+          .eq("id", tenantId);
+
+      } else if (metadata.type === "subscription") {
+        await supabaseAdmin
+          .from("tenants")
+          .update({ plan_tier: "pro" }) 
           .eq("id", tenantId);
       }
-    }
 
-    return new NextResponse("OK", { status: 200 });
-  } catch (error) {
-    return new NextResponse("Erro interno", { status: 500 });
+    } catch (dbError: any) {
+      console.error("Erro ao atualizar banco:", dbError.message);
+      return new NextResponse("Erro interno", { status: 500 });
+    }
   }
+
+  return new NextResponse("OK", { status: 200 });
 }

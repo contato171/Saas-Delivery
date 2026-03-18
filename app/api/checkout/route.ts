@@ -1,16 +1,16 @@
 export const dynamic = 'force-dynamic';
-import { stripe } from "../../../lib/stripe";
+import { stripe } from "../../../lib/stripe"; // Ajuste esse caminho se necessário
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// Inicializa o Supabase como ADMIN (Para conseguir ler/salvar o stripe_customer_id)
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
-);
-
 export async function POST(req: Request) {
   try {
+    // 1. A MÁGICA CONTRA O ERRO DA VERCEL: Inicializa o Supabase AQUI DENTRO!
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL as string,
+      process.env.SUPABASE_SERVICE_ROLE_KEY as string
+    );
+
     const { type, tenantId, priceId, amount } = await req.json();
 
     if (!tenantId) {
@@ -19,7 +19,7 @@ export async function POST(req: Request) {
 
     const baseUrl = process.env.NEXT_PUBLIC_URL || "https://saas-delivery-seven.vercel.app";
 
-    // 1. Busca os dados do Lojista no banco
+    // 2. Busca os dados do Lojista no banco
     const { data: tenant } = await supabaseAdmin
       .from("tenants")
       .select("*")
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Lojista não encontrado" }, { status: 404 });
     }
 
-    // 2. Gerencia o Cliente na Stripe (Cria um se não existir para salvar o cartão)
+    // 3. Gerencia o Cliente na Stripe
     let stripeCustomerId = tenant.stripe_customer_id;
 
     if (!stripeCustomerId) {
@@ -41,14 +41,12 @@ export async function POST(req: Request) {
       });
       stripeCustomerId = customer.id;
 
-      // Salva o ID da Stripe no banco de dados
       await supabaseAdmin
         .from("tenants")
         .update({ stripe_customer_id: stripeCustomerId })
         .eq("id", tenantId);
     }
 
-    // 3. Monta a sessão base
     let sessionConfig: any = {
       customer: stripeCustomerId,
       success_url: `${baseUrl}/painel?sucesso=true`,
@@ -56,32 +54,27 @@ export async function POST(req: Request) {
       client_reference_id: tenantId,
     };
 
-    // 4. Divide a lógica entre Assinatura e Recarga de Carteira
     if (type === "subscription") {
       if (!priceId) return NextResponse.json({ error: "Price ID ausente para assinatura" }, { status: 400 });
       
       sessionConfig = {
         ...sessionConfig,
         mode: "subscription",
-        payment_method_types: ["card"], // Assinatura principal no cartão
+        payment_method_types: ["card"],
         line_items: [{ price: priceId, quantity: 1 }],
         metadata: { type: "subscription", tenantId: tenantId },
       };
     } 
     else if (type === "topup") {
-      if (!amount) return NextResponse.json({ error: "Valor (amount) ausente para recarga" }, { status: 400 });
+      if (!amount) return NextResponse.json({ error: "Valor ausente para recarga" }, { status: 400 });
 
       sessionConfig = {
         ...sessionConfig,
         mode: "payment",
-        payment_method_types: ["card", "pix"], // Recarga da Carteira aceita PIX!
-        
-        // A MÁGICA DA RECARGA AUTOMÁTICA: 
-        // Se ele pagar com cartão, pede permissão para salvar o cartão para cobranças futuras "off_session"
+        payment_method_types: ["card", "pix"], 
         payment_intent_data: {
           setup_future_usage: "off_session", 
         },
-
         line_items: [
           {
             price_data: {
@@ -90,7 +83,7 @@ export async function POST(req: Request) {
                 name: "Recarga de Carteira (Taxas Delivery IA)",
                 description: "Saldo pré-pago para processamento de pedidos.",
               },
-              unit_amount: Math.round(amount * 100), // Stripe exige o valor em centavos (R$ 50 = 5000)
+              unit_amount: Math.round(amount * 100), 
             },
             quantity: 1,
           },
@@ -101,7 +94,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Tipo de cobrança inválido" }, { status: 400 });
     }
 
-    // 5. Cria o Checkout
     const session = await stripe.checkout.sessions.create(sessionConfig);
 
     return NextResponse.json({ url: session.url });
