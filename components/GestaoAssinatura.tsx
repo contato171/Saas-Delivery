@@ -5,15 +5,15 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import { 
   CreditCard, Wallet, Calendar, AlertCircle, 
-  CheckCircle2, ArrowRight, ShieldCheck, Zap, 
-  FileText, History, Loader2, QrCode
+  CheckCircle2, Plus, ArrowRight, ShieldCheck, Zap, 
+  FileText, History, Loader2, QrCode, X
 } from "lucide-react";
 
 export default function GestaoAssinatura({ tenantId }: { tenantId: string }) {
   const [tenant, setTenant] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   
-  // Estados do Modal de Pagamento (Mock para visualização inicial)
+  // Estados do Modal de Pagamento
   const [modalAberto, setModalAberto] = useState(false);
   const [tipoPagamento, setTipoPagamento] = useState<"cartao" | "pix">("cartao");
   const [valorRecarga, setValorRecarga] = useState("50");
@@ -29,12 +29,17 @@ export default function GestaoAssinatura({ tenantId }: { tenantId: string }) {
 
   if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-indigo-600" size={40}/></div>;
 
-  // Dados Simulados (Serão substituídos pela API da Stripe)
+  // Dados Simulados (Serão conectados com a Stripe no próximo passo)
   const planoAtual = tenant?.plan_tier === "pro_anual" ? "PRO Anual" : "PRO Mensal";
   const valorPlano = tenant?.plan_tier === "pro_anual" ? "R$ 397,00" : "R$ 497,00";
-  const renovacao = "15 de Abril de 2026";
+  
+  const hoje = new Date();
+  const renovacaoDate = new Date(hoje);
+  renovacaoDate.setDate(hoje.getDate() + 7); // Simulação de 7 dias de teste
+  const renovacao = renovacaoDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+  
   const saldoCarteira = 85.00;
-  const statusCartao = "final 4242"; // null se não tiver
+  const statusCartao = "final 4242"; // Deixe null se quiser ver o estado sem cartão
   const taxaVenda = "1,9%";
 
   return (
@@ -83,7 +88,7 @@ export default function GestaoAssinatura({ tenantId }: { tenantId: string }) {
                 {planoAtual !== "PRO Anual" && (
                   <div className="bg-gradient-to-br from-amber-100 to-orange-100 border border-amber-200 p-3 rounded-xl">
                     <p className="text-xs font-bold text-amber-800 mb-2 flex items-center gap-1"><Zap size={14}/> Quer economizar R$ 1.200?</p>
-                    <button className="w-full bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold py-2 rounded-lg transition-colors">Mudar para Plano Anual</button>
+                    <button className="w-full bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold py-2 rounded-lg transition-colors">Mudar para Anual</button>
                   </div>
                 )}
               </div>
@@ -130,7 +135,7 @@ export default function GestaoAssinatura({ tenantId }: { tenantId: string }) {
             
             <div className="p-6 border-b border-white/10 flex items-center justify-between">
               <h2 className="font-bold text-lg flex items-center gap-2"><Wallet size={20}/> Carteira (Taxas)</h2>
-              <div className="bg-white/10 px-2 py-1 rounded text-[10px] font-bold">{taxaVenda} por pedido</div>
+              <div className="bg-white/10 px-2 py-1 rounded text-[10px] font-bold">{taxaVenda} / pedido</div>
             </div>
             
             <div className="p-6">
@@ -150,7 +155,7 @@ export default function GestaoAssinatura({ tenantId }: { tenantId: string }) {
               </p>
 
               <button onClick={() => setModalAberto(true)} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-colors shadow-lg shadow-indigo-600/20 flex items-center justify-center gap-2">
-                <Plus size={18} className="lucide-plus" /> Adicionar Saldo
+                <Plus size={18} /> Adicionar Saldo
               </button>
             </div>
           </div>
@@ -189,7 +194,7 @@ export default function GestaoAssinatura({ tenantId }: { tenantId: string }) {
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95">
             <div className="p-6 border-b border-zinc-100 flex items-center justify-between">
               <h2 className="font-black text-xl">Adicionar Saldo</h2>
-              <button onClick={() => setModalAberto(false)} className="p-2 text-zinc-400 hover:text-zinc-800 rounded-full bg-zinc-100"><X size={20} className="lucide-x"/></button>
+              <button onClick={() => setModalAberto(false)} className="p-2 text-zinc-400 hover:text-zinc-800 rounded-full bg-zinc-100"><X size={20}/></button>
             </div>
             
             <div className="p-6 space-y-6">
@@ -234,7 +239,3 @@ export default function GestaoAssinatura({ tenantId }: { tenantId: string }) {
     </div>
   );
 }
-
-// Ícones complementares
-const Plus = (props: any) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M5 12h14"/><path d="M12 5v14"/></svg>;
-const X = (props: any) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>;

@@ -1,7 +1,6 @@
 // @ts-nocheck
 "use client";
 
-import GestaoAssinatura from "../../components/GestaoAssinatura";
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
 import MotorMarketing from "../../components/MotorMarketing";
@@ -11,10 +10,11 @@ import GestaoCardapio from "../../components/GestaoCardapio";
 import ConfigLoja from "../../components/ConfigLoja";
 import GestaoCRM from "../../components/GestaoCRM";
 import GestaoIntegracoes from "../../components/GestaoIntegracoes";
+import GestaoAssinatura from "../../components/GestaoAssinatura";
 
 import { 
   Home, Compass, Users, LayoutDashboard, CreditCard, 
-  Settings, LogOut, Bell, HelpCircle, Store, Sparkles, Plug 
+  Settings, LogOut, Bell, HelpCircle, Store, Sparkles, Plug, Edit3
 } from "lucide-react";
 
 export default function PainelLojista() {
@@ -22,7 +22,6 @@ export default function PainelLojista() {
   const [produtos, setProdutos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [abaAtiva, setAbaAtiva] = useState("inicio"); 
-  const [menuLojaAberto, setMenuLojaAberto] = useState(false);
 
   const [modoAuth, setModoAuth] = useState<"login" | "cadastro">("login");
   const [email, setEmail] = useState("");
@@ -175,70 +174,89 @@ export default function PainelLojista() {
   }
 
   // =======================================================
-  // MENU LATERAL PREMIUM
+  // LÓGICA DE DATAS (MOCK PARA O TESTE GRÁTIS)
   // =======================================================
+  const hoje = new Date();
+  const dataRenovacao = new Date(hoje);
+  dataRenovacao.setDate(hoje.getDate() + 7); // Simulação de +7 dias
+  const dataFormatada = dataRenovacao.toLocaleDateString('pt-BR');
+  const planoNome = tenant.plan_tier === 'pro_anual' ? 'PRO Anual' : tenant.plan_tier === 'pro' ? 'PRO Mensal' : 'Teste Grátis';
+
   return (
-    <div className="min-h-screen bg-[#F9FAFB] flex font-sans overflow-hidden">
+    <div className="min-h-screen bg-[#F8F9FA] flex font-sans overflow-hidden">
       
-      <aside className="w-72 bg-white border-r border-zinc-200 hidden md:flex flex-col min-h-screen z-10">
+      <aside className="w-64 bg-white border-r border-zinc-200 hidden md:flex flex-col min-h-screen z-10 shadow-[2px_0_10px_rgba(0,0,0,0.02)]">
         
-        {/* CARD DO PLANO (IGUAL AO PRINT) */}
-        <div className="p-5">
-          <div className="bg-white border border-zinc-200 rounded-2xl p-5 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)]">
-            <h3 className="font-black text-zinc-900 text-base leading-tight truncate">{tenant.name}</h3>
-            <p className="text-xs text-zinc-500 font-medium mb-5">Estabelecimento</p>
+        <div className="p-6 border-b border-zinc-100 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white flex items-center justify-center font-black text-xl shadow-md">
+             {tenant.name.charAt(0)}
+          </div>
+          <h2 className="font-black text-xl text-zinc-900 tracking-tight truncate">Delivery<span className="text-indigo-600">IA</span></h2>
+        </div>
+
+        {/* CARD PLANO PRO ATIVO COM DETALHES DE DATA */}
+        <div className="p-6">
+          <div className="bg-white border border-zinc-200 rounded-2xl p-5 shadow-sm relative group">
+            <h3 className="font-black text-zinc-900 text-lg leading-tight truncate mb-0.5">{tenant.name}</h3>
+            <p className="text-xs text-zinc-500 font-medium mb-4">Estabelecimento</p>
             
-            <p className="text-[11px] text-zinc-600 font-bold uppercase tracking-wider mb-2">Plan:</p>
-            <div className="inline-block bg-[#1877F2] text-white font-bold text-[11px] px-3.5 py-1.5 rounded-full mb-5">
-              PRO Ativo
+            <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider mb-1">Plano Atual:</p>
+            <div className="inline-block bg-blue-600 text-white font-bold text-xs px-3 py-1 rounded-full mb-3 shadow-sm shadow-blue-600/30">
+              {planoNome}
             </div>
 
-            <div className="w-full h-px bg-zinc-100 mb-5"></div>
-
-            <p className="text-[11px] text-zinc-600 font-bold uppercase tracking-wider mb-1">Plan Details:</p>
-            <p className="font-black text-zinc-900 text-xl uppercase">{tenant.plan_tier || 'FREE'}</p>
+            {/* Nova Seção de Status do Plano */}
+            <div className="bg-zinc-50 rounded-xl p-3 border border-zinc-100 space-y-2">
+               <div className="flex justify-between items-center">
+                 <span className="text-[10px] font-bold text-zinc-500 uppercase">Status</span>
+                 <span className="text-[10px] font-black text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">Ativo</span>
+               </div>
+               <div className="flex justify-between items-center">
+                 <span className="text-[10px] font-bold text-zinc-500 uppercase">Próx. Cobrança</span>
+                 <span className="text-xs font-black text-zinc-900">{dataFormatada}</span>
+               </div>
+            </div>
+            
+            <button onClick={() => mudarAba("financeiro")} className="absolute top-4 right-4 text-zinc-400 hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition-all flex items-center gap-1.5 font-bold text-xs"><Edit3 size={14}/> Editar</button>
           </div>
         </div>
 
-        {/* NAVEGAÇÃO */}
-        <nav className="flex-1 px-5 flex flex-col gap-1 overflow-y-auto">
-          
-          <button onClick={() => mudarAba("inicio")} className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all flex items-center gap-3 ${abaAtiva === "inicio" ? "bg-indigo-50 text-indigo-700 font-bold" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}>
+        <nav className="flex-1 px-4 flex flex-col gap-1 overflow-y-auto custom-scrollbar">
+          <button onClick={() => mudarAba("inicio")} className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${abaAtiva === "inicio" ? "bg-indigo-50 text-indigo-700" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}>
             <Home size={18} className={abaAtiva === "inicio" ? "text-indigo-600" : "text-zinc-400"}/> Início
           </button>
           
-          <button onClick={() => mudarAba("pedidos")} className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all flex items-center gap-3 ${abaAtiva === "pedidos" ? "bg-indigo-50 text-indigo-700 font-bold" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}>
+          <button onClick={() => mudarAba("pedidos")} className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${abaAtiva === "pedidos" ? "bg-indigo-50 text-indigo-700" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}>
             <Compass size={18} className={abaAtiva === "pedidos" ? "text-indigo-600" : "text-zinc-400"}/> Pedidos
           </button>
           
-          <button onClick={() => mudarAba("cardapio")} className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all flex items-center gap-3 ${abaAtiva === "cardapio" ? "bg-indigo-50 text-indigo-700 font-bold" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}>
+          <button onClick={() => mudarAba("cardapio")} className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${abaAtiva === "cardapio" ? "bg-indigo-50 text-indigo-700" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}>
             <LayoutDashboard size={18} className={abaAtiva === "cardapio" ? "text-indigo-600" : "text-zinc-400"}/> Cardápios
           </button>
           
-          <button onClick={() => mudarAba("loja")} className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all flex items-center gap-3 ${abaAtiva === "loja" ? "bg-indigo-50 text-indigo-700 font-bold" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}>
+          <button onClick={() => mudarAba("loja")} className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${abaAtiva === "loja" ? "bg-indigo-50 text-indigo-700" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}>
             <Store size={18} className={abaAtiva === "loja" ? "text-indigo-600" : "text-zinc-400"}/> Lojas
           </button>
 
-          <div className="my-3 border-t border-zinc-100 mx-2"></div>
+          <button onClick={() => mudarAba("financeiro")} className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${abaAtiva === "financeiro" ? "bg-indigo-50 text-indigo-700" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}>
+            <CreditCard size={18} className={abaAtiva === "financeiro" ? "text-indigo-600" : "text-zinc-400"}/> Financeiro
+          </button>
 
-          <button onClick={() => mudarAba("marketing")} className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all flex items-center gap-3 ${abaAtiva === "marketing" ? "bg-indigo-50 text-indigo-700 font-bold" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}>
+          <div className="my-2 border-t border-zinc-100 mx-2"></div>
+
+          <button onClick={() => mudarAba("marketing")} className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${abaAtiva === "marketing" ? "bg-indigo-50 text-indigo-700" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}>
             <Sparkles size={18} className={abaAtiva === "marketing" ? "text-indigo-600" : "text-zinc-400"}/> Marketing IA
           </button>
           
-          <button onClick={() => mudarAba("crm")} className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all flex items-center gap-3 ${abaAtiva === "crm" ? "bg-indigo-50 text-indigo-700 font-bold" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}>
+          <button onClick={() => mudarAba("crm")} className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${abaAtiva === "crm" ? "bg-indigo-50 text-indigo-700" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}>
             <Users size={18} className={abaAtiva === "crm" ? "text-indigo-600" : "text-zinc-400"}/> CRM & Clientes
           </button>
 
-          <button onClick={() => mudarAba("integracoes")} className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all flex items-center gap-3 ${abaAtiva === "integracoes" ? "bg-indigo-50 text-indigo-700 font-bold" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}>
+          <button onClick={() => mudarAba("integracoes")} className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold transition-all flex items-center gap-3 ${abaAtiva === "integracoes" ? "bg-indigo-50 text-indigo-700" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}>
             <Plug size={18} className={abaAtiva === "integracoes" ? "text-indigo-600" : "text-zinc-400"}/> Integrações
-          </button>
-
-          <button onClick={() => mudarAba("financeiro")} className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all flex items-center gap-3 ${abaAtiva === "financeiro" ? "bg-indigo-50 text-indigo-700 font-bold" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}>
-          <CreditCard size={18} className={abaAtiva === "financeiro" ? "text-indigo-600" : "text-zinc-400"}/> Financeiro
           </button>
         </nav>
 
-        {/* ÍCONES DE RODAPÉ */}
         <div className="p-4 border-t border-zinc-100 flex items-center justify-between">
           <div className="flex gap-1">
             <button className="p-2.5 text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 rounded-lg transition-colors"><Bell size={18}/></button>
@@ -249,16 +267,15 @@ export default function PainelLojista() {
       </aside>
 
       <main className="flex-1 p-8 overflow-y-auto h-screen relative">
-        <div className="absolute top-0 left-0 w-full h-72 bg-gradient-to-b from-indigo-50/60 to-transparent pointer-events-none -z-10"></div>
+        <div className="absolute top-0 left-0 w-full h-64 bg-gradient-to-b from-indigo-50/50 to-transparent pointer-events-none -z-10"></div>
         
-        {abaAtiva === "inicio" && tenant && <DashboardInicio tenant={tenant} />}
+        {abaAtiva === "inicio" && tenant && <DashboardInicio tenant={tenant} onNavigate={mudarAba}/>}
         {abaAtiva === "pedidos" && tenant && <div className="w-full max-w-7xl animate-in fade-in"><PedidosAoVivo tenantId={tenant.id} /></div>}
         {abaAtiva === "marketing" && tenant && <div className="w-full max-w-6xl animate-in fade-in"><MotorMarketing tenantId={tenant.id} /></div>}
         {abaAtiva === "cardapio" && tenant && <div className="w-full max-w-7xl animate-in fade-in"><GestaoCardapio tenantId={tenant.id} /></div>}
         {abaAtiva === "loja" && tenant && <div className="w-full max-w-5xl animate-in fade-in"><ConfigLoja tenant={tenant} onUpdate={() => buscarDados(tenant.id)} /></div>}
         {abaAtiva === "crm" && tenant && <div className="w-full max-w-6xl animate-in fade-in"><GestaoCRM tenantId={tenant.id} /></div>}
         {abaAtiva === "integracoes" && tenant && <div className="w-full max-w-6xl animate-in fade-in"><GestaoIntegracoes tenantId={tenant.id} /></div>}
-        {abaAtiva === "financeiro" && tenant && <div className="w-full max-w-6xl animate-in fade-in"><GestaoAssinatura tenantId={tenant.id} /></div>}
         {abaAtiva === "financeiro" && tenant && <div className="w-full max-w-6xl animate-in fade-in"><GestaoAssinatura tenantId={tenant.id} /></div>}
       </main>
     </div>
