@@ -34,7 +34,7 @@ export default function GestaoAssinatura({ tenantId }: { tenantId: string }) {
   const gerarCheckout = async (type: "subscription" | "topup", amount?: number, priceId?: string) => {
     setProcessandoCheckout(true);
     try {
-      const res = await fetch("/api/stripe/checkout", {
+      const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
