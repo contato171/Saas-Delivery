@@ -10,7 +10,6 @@ import CarrinhoLateral from "../../components/CarrinhoLateral";
 import CheckoutModal from "../../components/CheckoutModal";
 import { CartProvider } from "../../components/CartContext";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import Script from "next/script"; // IMPORTAÇÃO OFICIAL DO NEXT.JS PARA SCRIPTS EXTERNOS
 
 export default function VitrineLoja() {
   const params = useParams();
@@ -55,6 +54,69 @@ export default function VitrineLoja() {
     setLoading(false);
   };
 
+  // ========================================================
+  // RASTREAMENTO INTELIGENTE: META PIXEL + GOOGLE ANALYTICS
+  // ========================================================
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      
+      // 1. INJEÇÃO DO META PIXEL
+      if (tenant?.meta_pixel_id) {
+        const initMetaPixel = () => {
+          // @ts-ignore
+          if (window.fbq) return;
+          // @ts-ignore
+          const fbq = window.fbq = function() {
+            // @ts-ignore
+            fbq.callMethod ? fbq.callMethod.apply(fbq, arguments) : fbq.queue.push(arguments);
+          };
+          // @ts-ignore
+          if (!window._fbq) window._fbq = fbq;
+          fbq.push = fbq;
+          fbq.loaded = true;
+          fbq.version = '2.0';
+          fbq.queue = [];
+          
+          const script = document.createElement('script');
+          script.async = true;
+          script.src = 'https://connect.facebook.net/en_US/fbevents.js';
+          document.head.appendChild(script);
+        };
+
+        initMetaPixel();
+        // @ts-ignore
+        window.fbq('init', tenant.meta_pixel_id);
+        // @ts-ignore
+        window.fbq('track', 'PageView');
+      }
+
+      // 2. INJEÇÃO DO GOOGLE ANALYTICS (GA4)
+      if (tenant?.ga_measurement_id) {
+        const scriptUrl = `https://www.googletagmanager.com/gtag/js?id=${tenant.ga_measurement_id}`;
+        
+        // Verifica se o script do GA já não foi injetado antes para evitar duplicação
+        if (!document.querySelector(`script[src="${scriptUrl}"]`)) {
+          const script = document.createElement('script');
+          script.async = true;
+          script.src = scriptUrl;
+          document.head.appendChild(script);
+
+          // @ts-ignore
+          window.dataLayer = window.dataLayer || [];
+          // @ts-ignore
+          function gtag(){window.dataLayer.push(arguments);}
+          
+          // @ts-ignore
+          gtag('js', new Date());
+          // @ts-ignore
+          gtag('config', tenant.ga_measurement_id, {
+            page_path: window.location.pathname,
+          });
+        }
+      }
+    }
+  }, [tenant?.meta_pixel_id, tenant?.ga_measurement_id]);
+
   const scrollEsquerda = () => {
     if (carouselRef.current) {
       carouselRef.current.scrollBy({ left: -300, behavior: 'smooth' });
@@ -94,28 +156,6 @@ export default function VitrineLoja() {
 
   return (
     <CartProvider tenantId={tenant.id}>
-      {/* MÁGICA DO PIXEL 1: INJEÇÃO NATIVA DO NEXT.JS (PAGEVIEW) */}
-      {tenant?.meta_pixel_id && (
-        <Script
-          id="fb-pixel"
-          strategy="afterInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `
-              !function(f,b,e,v,n,t,s)
-              {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-              n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-              if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-              n.queue=[];t=b.createElement(e);t.async=!0;
-              t.src=v;s=b.getElementsByTagName(e)[0];
-              s.parentNode.insertBefore(t,s)}(window, document,'script',
-              'https://connect.facebook.net/en_US/fbevents.js');
-              fbq('init', '${tenant.meta_pixel_id}');
-              fbq('track', 'PageView');
-            `,
-          }}
-        />
-      )}
-
       <div className="min-h-screen bg-zinc-50 font-sans pb-20">
         
         <div className="w-full h-40 md:h-64 bg-zinc-200 relative">

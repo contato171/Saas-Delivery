@@ -108,7 +108,9 @@ export default function DashboardInicio({ tenant }: { tenant: any }) {
   const animVisitas = useAnimatedValue(visitasEstimadas, 1800, triggerAnim);
   const animConversao = useAnimatedValue(taxaConversao, 1500, triggerAnim);
   const animTicket = useAnimatedValue(ticketMedio, 1500, triggerAnim);
-  const animEconomia = useAnimatedValue(faturamentoTotal * 0.152 + (totalPedidos > 0 ? 130 : 0), 2000, triggerAnim);
+  
+  // CÁLCULO AJUSTADO: Usa 15% como média de mercado de plataformas terceiras
+  const animEconomia = useAnimatedValue(faturamentoTotal * 0.15, 2000, triggerAnim);
 
   const progressoPorcentagem = metaMensal > 0 ? Math.min((faturamentoTotal / metaMensal) * 100, 100) : 0;
   const progressoAnimado = useAnimatedValue(progressoPorcentagem, 2000, triggerAnim);
@@ -129,7 +131,7 @@ export default function DashboardInicio({ tenant }: { tenant: any }) {
     setEditandoMeta(false);
   };
 
-  const custoIfoodTotal = animEconomia;
+  const custoOutrasPlataformas = animEconomia;
 
   const rankingMap: Record<string, { quant: number, receita: number }> = {};
   itensVendidos.forEach(item => {
@@ -282,17 +284,17 @@ export default function DashboardInicio({ tenant }: { tenant: any }) {
           </div>
         </div>
 
-        {/* O COFRE ANTI-IFOOD */}
+        {/* O COFRE ANTI-TAXAS */}
         <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-3xl p-6 md:p-8 shadow-lg shadow-emerald-500/20 text-white relative overflow-hidden flex flex-col justify-between">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-bl-full pointer-events-none"></div>
           <div>
             <h3 className="font-black text-emerald-50 text-sm uppercase tracking-wider mb-1 flex items-center gap-2"><ShieldCheck size={18}/> Cofre de Taxas</h3>
-            <p className="text-emerald-100 text-xs mb-6">O "imposto" que você não pagou</p>
-            <div className="flex items-end gap-2 mb-2"><span className="text-5xl font-black tracking-tighter leading-none">R$ {custoIfoodTotal.toFixed(2).replace('.', ',')}</span></div>
+            <p className="text-emerald-100 text-xs mb-6">Quanto você estaria perdendo em outras plataformas de delivery</p>
+            <div className="flex items-end gap-2 mb-2"><span className="text-5xl font-black tracking-tighter leading-none">R$ {custoOutrasPlataformas.toFixed(2).replace('.', ',')}</span></div>
             <p className="text-emerald-100 font-bold text-sm bg-black/10 inline-block px-3 py-1 rounded-lg">Protegidos este mês 💸</p>
           </div>
           <div className="mt-8 bg-black/20 backdrop-blur-md rounded-xl p-4 border border-white/10">
-            <div className="flex justify-between items-center mb-2"><span className="text-xs text-emerald-100 font-medium">Se fosse no iFood:</span><span className="text-sm font-black text-red-300">- R$ {custoIfoodTotal.toFixed(2).replace('.', ',')}</span></div>
+            <div className="flex justify-between items-center mb-2"><span className="text-xs text-emerald-100 font-medium">Em outras plataformas:</span><span className="text-sm font-black text-red-300">- R$ {custoOutrasPlataformas.toFixed(2).replace('.', ',')}</span></div>
             <div className="flex justify-between items-center pt-2 border-t border-white/10"><span className="text-xs text-emerald-100 font-medium">No seu sistema próprio:</span><span className="text-sm font-black text-emerald-300">R$ 0,00 (100% Seu)</span></div>
           </div>
         </div>
