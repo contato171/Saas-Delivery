@@ -1,6 +1,7 @@
 // @ts-nocheck
 "use client";
 
+import GestaoAssinatura from "../../components/GestaoAssinatura";
 import { useState, useEffect } from "react";
 import { supabase } from "../../lib/supabase";
 import MotorMarketing from "../../components/MotorMarketing";
@@ -231,6 +232,10 @@ export default function PainelLojista() {
           <button onClick={() => mudarAba("integracoes")} className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all flex items-center gap-3 ${abaAtiva === "integracoes" ? "bg-indigo-50 text-indigo-700 font-bold" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}>
             <Plug size={18} className={abaAtiva === "integracoes" ? "text-indigo-600" : "text-zinc-400"}/> Integrações
           </button>
+
+          <button onClick={() => mudarAba("financeiro")} className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all flex items-center gap-3 ${abaAtiva === "financeiro" ? "bg-indigo-50 text-indigo-700 font-bold" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}>
+          <CreditCard size={18} className={abaAtiva === "financeiro" ? "text-indigo-600" : "text-zinc-400"}/> Financeiro
+          </button>
         </nav>
 
         {/* ÍCONES DE RODAPÉ */}
@@ -253,6 +258,8 @@ export default function PainelLojista() {
         {abaAtiva === "loja" && tenant && <div className="w-full max-w-5xl animate-in fade-in"><ConfigLoja tenant={tenant} onUpdate={() => buscarDados(tenant.id)} /></div>}
         {abaAtiva === "crm" && tenant && <div className="w-full max-w-6xl animate-in fade-in"><GestaoCRM tenantId={tenant.id} /></div>}
         {abaAtiva === "integracoes" && tenant && <div className="w-full max-w-6xl animate-in fade-in"><GestaoIntegracoes tenantId={tenant.id} /></div>}
+        {abaAtiva === "financeiro" && tenant && <div className="w-full max-w-6xl animate-in fade-in"><GestaoAssinatura tenantId={tenant.id} /></div>}
+        {abaAtiva === "financeiro" && tenant && <div className="w-full max-w-6xl animate-in fade-in"><GestaoAssinatura tenantId={tenant.id} /></div>}
       </main>
     </div>
   );

@@ -32,8 +32,31 @@ export default function VitrineLoja() {
     }
   }, [slug]);
 
-  const carregarLoja = async () => {
+ const carregarLoja = async () => {
     setLoading(true);
+
+    // ==========================================
+    // SISTEMA DE CACHE (Economiza Banco de Dados)
+    // ==========================================
+    const CACHE_KEY = `@saas_menu_${slug}`;
+    const CACHE_TIME = 1000 * 60 * 15; // 15 minutos de validade do cache
+
+    if (typeof window !== "undefined") {
+      const cacheSalvo = localStorage.getItem(CACHE_KEY);
+      if (cacheSalvo) {
+        const { data, timestamp } = JSON.parse(cacheSalvo);
+        
+        // Se o cache ainda estiver dentro dos 15 minutos, usa ele e aborta o Supabase
+        if (Date.now() - timestamp < CACHE_TIME) {
+          setTenant(data.tenant);
+          setProdutos(data.produtos);
+          setLoading(false);
+          return; // Pula a requisição ao banco!
+        }
+      }
+    }
+
+    // Se não tiver cache ou estiver vencido, busca no banco de dados
     const { data: tenantData } = await supabase
       .from("tenants")
       .select("*")
@@ -50,6 +73,14 @@ export default function VitrineLoja() {
         .order("name", { ascending: true }); 
 
       setProdutos(produtosData || []);
+
+      // Salva os dados frescos no Cache do celular do cliente
+      if (typeof window !== "undefined") {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({
+          data: { tenant: tenantData, produtos: produtosData || [] },
+          timestamp: Date.now()
+        }));
+      }
     }
     setLoading(false);
   };
