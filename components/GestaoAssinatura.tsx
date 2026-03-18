@@ -12,6 +12,7 @@ import {
 export default function GestaoAssinatura({ tenantId }: { tenantId: string }) {
   const [tenant, setTenant] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [processandoCheckout, setProcessandoCheckout] = useState(false);
   
   // Estados do Modal de Pagamento
   const [modalAberto, setModalAberto] = useState(false);
@@ -27,19 +28,60 @@ export default function GestaoAssinatura({ tenantId }: { tenantId: string }) {
     carregarDados();
   }, [tenantId]);
 
+  // ===============================================
+  // FUNÇÃO QUE CHAMA A ROTA DE CHECKOUT DO NEXT.JS
+  // ===============================================
+  const gerarCheckout = async (type: "subscription" | "topup", amount?: number, priceId?: string) => {
+    setProcessandoCheckout(true);
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenantId,
+          type,
+          amount,
+          priceId
+        }),
+      });
+      const data = await res.json();
+      
+      if (data.url) {
+        // Redireciona o lojista para a página de pagamento da Stripe
+        window.location.href = data.url;
+      } else {
+        alert("Erro ao gerar pagamento: " + (data.error || "Desconhecido"));
+      }
+    } catch (error) {
+      alert("Falha na conexão com o financeiro.");
+    } finally {
+      setProcessandoCheckout(false);
+    }
+  };
+
+  const handleRecarga = () => {
+    gerarCheckout("topup", Number(valorRecarga));
+  };
+
+  const handleAssinarPlano = (tipo: "mensal" | "anual") => {
+    // ATENÇÃO: Substitua os IDs abaixo pelos IDs reais dos seus produtos criados no painel da Stripe!
+    const priceId = tipo === "mensal" ? "price_1TCLtUBno2bIxVzmyKt1Es4U" : "price_1TCLuSBno2bIxVzmit0NrkLI";
+    gerarCheckout("subscription", undefined, priceId);
+  };
+
   if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-indigo-600" size={40}/></div>;
 
-  // Dados Simulados (Serão conectados com a Stripe no próximo passo)
   const planoAtual = tenant?.plan_tier === "pro_anual" ? "PRO Anual" : "PRO Mensal";
   const valorPlano = tenant?.plan_tier === "pro_anual" ? "R$ 397,00" : "R$ 497,00";
   
   const hoje = new Date();
   const renovacaoDate = new Date(hoje);
-  renovacaoDate.setDate(hoje.getDate() + 7); // Simulação de 7 dias de teste
+  renovacaoDate.setDate(hoje.getDate() + 7);
   const renovacao = renovacaoDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
   
-  const saldoCarteira = 85.00;
-  const statusCartao = "final 4242"; // Deixe null se quiser ver o estado sem cartão
+  // Aqui você puxa o saldo real que agora existe na tabela tenants
+  const saldoCarteira = tenant?.wallet_balance || 0.00;
+  const statusCartao = tenant?.stripe_customer_id ? "Ativo na Stripe" : null; 
   const taxaVenda = "1,9%";
 
   return (
@@ -52,10 +94,9 @@ export default function GestaoAssinatura({ tenantId }: { tenantId: string }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* COLUNA ESQUERDA: PLANO E CARTÃO */}
+        {/* COLUNA ESQUERDA */}
         <div className="lg:col-span-2 space-y-6">
           
-          {/* CARD DO PLANO */}
           <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden">
             <div className="p-6 border-b border-zinc-100 flex items-center justify-between bg-zinc-50/50">
               <div className="flex items-center gap-3">
@@ -88,14 +129,15 @@ export default function GestaoAssinatura({ tenantId }: { tenantId: string }) {
                 {planoAtual !== "PRO Anual" && (
                   <div className="bg-gradient-to-br from-amber-100 to-orange-100 border border-amber-200 p-3 rounded-xl">
                     <p className="text-xs font-bold text-amber-800 mb-2 flex items-center gap-1"><Zap size={14}/> Quer economizar R$ 1.200?</p>
-                    <button className="w-full bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold py-2 rounded-lg transition-colors">Mudar para Anual</button>
+                    <button onClick={() => handleAssinarPlano("anual")} disabled={processandoCheckout} className="w-full bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold py-2 rounded-lg transition-colors flex justify-center items-center">
+                      {processandoCheckout ? <Loader2 size={16} className="animate-spin"/> : "Mudar para Anual"}
+                    </button>
                   </div>
                 )}
               </div>
             </div>
           </div>
 
-          {/* CARD DE PAGAMENTO */}
           <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden">
             <div className="p-6 border-b border-zinc-100 bg-zinc-50/50">
               <h2 className="font-bold text-lg text-zinc-900 flex items-center gap-2"><CreditCard size={20}/> Forma de Pagamento</h2>
@@ -105,20 +147,21 @@ export default function GestaoAssinatura({ tenantId }: { tenantId: string }) {
               {statusCartao ? (
                 <div className="flex items-center justify-between p-4 border border-zinc-200 rounded-xl">
                   <div className="flex items-center gap-4">
-                    <div className="bg-zinc-100 p-3 rounded-lg"><CreditCard size={24} className="text-zinc-600"/></div>
+                    <div className="bg-emerald-50 text-emerald-600 p-3 rounded-lg"><CheckCircle2 size={24}/></div>
                     <div>
-                      <p className="font-bold text-zinc-900">Mastercard •••• {statusCartao}</p>
-                      <p className="text-xs text-zinc-500 mt-0.5">Expira em 12/28</p>
+                      <p className="font-bold text-zinc-900">Conta Conectada à Stripe</p>
+                      <p className="text-xs text-zinc-500 mt-0.5">Sistema financeiro ativo e protegido.</p>
                     </div>
                   </div>
-                  <button className="text-sm font-bold text-indigo-600 hover:text-indigo-800">Alterar</button>
                 </div>
               ) : (
                 <div className="text-center py-6 bg-zinc-50 border border-zinc-200 border-dashed rounded-xl">
                   <AlertCircle size={32} className="mx-auto text-amber-500 mb-3"/>
                   <p className="font-bold text-zinc-900">Nenhum cartão cadastrado</p>
                   <p className="text-sm text-zinc-500 mb-4 max-w-sm mx-auto">Cadastre um cartão para garantir a renovação automática e não ter sua loja pausada.</p>
-                  <button className="bg-zinc-900 text-white font-bold px-6 py-2.5 rounded-xl shadow-md">Cadastrar Cartão</button>
+                  <button onClick={() => handleAssinarPlano("mensal")} disabled={processandoCheckout} className="bg-zinc-900 text-white font-bold px-6 py-2.5 rounded-xl shadow-md flex items-center justify-center gap-2 mx-auto">
+                    {processandoCheckout ? <Loader2 size={18} className="animate-spin"/> : "Cadastrar Cartão (Assinar)"}
+                  </button>
                 </div>
               )}
             </div>
@@ -126,10 +169,9 @@ export default function GestaoAssinatura({ tenantId }: { tenantId: string }) {
           
         </div>
 
-        {/* COLUNA DIREITA: CARTEIRA E FATURAS */}
+        {/* COLUNA DIREITA */}
         <div className="space-y-6">
           
-          {/* O COFRE / CARTEIRA */}
           <div className="bg-zinc-900 rounded-3xl shadow-xl overflow-hidden text-white relative">
             <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/20 blur-[50px] rounded-full pointer-events-none"></div>
             
@@ -158,31 +200,6 @@ export default function GestaoAssinatura({ tenantId }: { tenantId: string }) {
                 <Plus size={18} /> Adicionar Saldo
               </button>
             </div>
-          </div>
-
-          {/* HISTÓRICO */}
-          <div className="bg-white rounded-3xl border border-zinc-200 shadow-sm overflow-hidden">
-             <div className="p-5 border-b border-zinc-100 bg-zinc-50/50">
-              <h2 className="font-bold text-zinc-900 flex items-center gap-2"><History size={18}/> Faturas Recentes</h2>
-            </div>
-            <div className="divide-y divide-zinc-100">
-              {[
-                { data: "15/03/2026", desc: "Plano PRO Mensal", valor: "R$ 497,00", status: "Pago" },
-                { data: "10/03/2026", desc: "Recarga Carteira", valor: "R$ 50,00", status: "Pago" }
-              ].map((fatura, idx) => (
-                <div key={idx} className="p-4 flex items-center justify-between hover:bg-zinc-50 transition-colors cursor-pointer">
-                  <div>
-                    <p className="font-bold text-sm text-zinc-900">{fatura.desc}</p>
-                    <p className="text-xs text-zinc-500">{fatura.data}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-sm text-zinc-900">{fatura.valor}</p>
-                    <p className="text-[10px] text-emerald-600 font-bold uppercase">{fatura.status}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <button className="w-full p-4 text-xs font-bold text-indigo-600 hover:bg-zinc-50 transition-colors border-t border-zinc-100">Ver Histórico Completo</button>
           </div>
 
         </div>
@@ -221,15 +238,8 @@ export default function GestaoAssinatura({ tenantId }: { tenantId: string }) {
                 </div>
               </div>
 
-              {tipoPagamento === "cartao" && !statusCartao && (
-                <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-start gap-3">
-                  <AlertCircle size={18} className="text-amber-500 shrink-0 mt-0.5"/>
-                  <p className="text-xs text-amber-800 font-medium">Ao usar o cartão, ele ficará salvo para <strong>recargas automáticas</strong> quando seu saldo acabar, garantindo que sua loja nunca saia do ar.</p>
-                </div>
-              )}
-
-              <button className={`w-full text-white font-black py-4 rounded-xl shadow-lg transition-colors flex justify-center items-center gap-2 ${tipoPagamento === 'pix' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
-                {tipoPagamento === 'pix' ? "Gerar Código PIX" : "Pagar com Cartão"}
+              <button onClick={handleRecarga} disabled={processandoCheckout} className={`w-full text-white font-black py-4 rounded-xl shadow-lg transition-colors flex justify-center items-center gap-2 ${tipoPagamento === 'pix' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-indigo-600 hover:bg-indigo-700'} disabled:opacity-50`}>
+                {processandoCheckout ? <Loader2 size={20} className="animate-spin"/> : tipoPagamento === 'pix' ? "Gerar Código PIX" : "Pagar com Cartão"}
               </button>
             </div>
           </div>
