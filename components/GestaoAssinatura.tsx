@@ -6,7 +6,7 @@ import { supabase } from "../lib/supabase";
 import { 
   CreditCard, Wallet, Calendar, AlertCircle, 
   CheckCircle2, Plus, ArrowRight, ShieldCheck, Zap, 
-  FileText, History, Loader2, QrCode, X
+  History, Loader2, QrCode, X
 } from "lucide-react";
 
 export default function GestaoAssinatura({ tenantId }: { tenantId: string }) {
@@ -28,10 +28,8 @@ export default function GestaoAssinatura({ tenantId }: { tenantId: string }) {
     carregarDados();
   }, [tenantId]);
 
-  // ===============================================
-  // FUNÇÃO QUE CHAMA A ROTA DE CHECKOUT DO NEXT.JS
-  // ===============================================
-  const gerarCheckout = async (type: "subscription" | "topup", amount?: number, priceId?: string) => {
+  // Função central de pagamento (com a rota corrigida e método de pagamento)
+  const gerarCheckout = async (type: "subscription" | "topup", amount?: number, priceId?: string, paymentMethod?: string) => {
     setProcessandoCheckout(true);
     try {
       const res = await fetch("/api/checkout", {
@@ -41,13 +39,14 @@ export default function GestaoAssinatura({ tenantId }: { tenantId: string }) {
           tenantId,
           type,
           amount,
-          priceId
+          priceId,
+          paymentMethod // Avisa se é cartão ou pix
         }),
       });
+      
       const data = await res.json();
       
       if (data.url) {
-        // Redireciona o lojista para a página de pagamento da Stripe
         window.location.href = data.url;
       } else {
         alert("Erro ao gerar pagamento: " + (data.error || "Desconhecido"));
@@ -60,18 +59,18 @@ export default function GestaoAssinatura({ tenantId }: { tenantId: string }) {
   };
 
   const handleRecarga = () => {
-    gerarCheckout("topup", Number(valorRecarga));
+    gerarCheckout("topup", Number(valorRecarga), undefined, tipoPagamento);
   };
 
   const handleAssinarPlano = (tipo: "mensal" | "anual") => {
-    // ATENÇÃO: Substitua os IDs abaixo pelos IDs reais dos seus produtos criados no painel da Stripe!
-    const priceId = tipo === "mensal" ? "price_1TCLtUBno2bIxVzmyKt1Es4U" : "price_1TCLuSBno2bIxVzmit0NrkLI";
-    gerarCheckout("subscription", undefined, priceId);
+    // Substitua os IDs reais da Stripe aqui depois
+    const priceId = tipo === "mensal" ? "price_SEU_ID_MENSAL_AQUI" : "price_SEU_ID_ANUAL_AQUI";
+    gerarCheckout("subscription", undefined, priceId, "cartao");
   };
 
   if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-indigo-600" size={40}/></div>;
 
-  const planoAtual = tenant?.plan_tier === "pro_anual" ? "PRO Anual" : "PRO Mensal";
+  const planoAtual = tenant?.plan_tier === "pro_anual" ? "PRO Anual" : tenant?.plan_tier === "pro" ? "PRO Mensal" : "Teste Grátis";
   const valorPlano = tenant?.plan_tier === "pro_anual" ? "R$ 397,00" : "R$ 497,00";
   
   const hoje = new Date();
@@ -79,7 +78,6 @@ export default function GestaoAssinatura({ tenantId }: { tenantId: string }) {
   renovacaoDate.setDate(hoje.getDate() + 7);
   const renovacao = renovacaoDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
   
-  // Aqui você puxa o saldo real que agora existe na tabela tenants
   const saldoCarteira = tenant?.wallet_balance || 0.00;
   const statusCartao = tenant?.stripe_customer_id ? "Ativo na Stripe" : null; 
   const taxaVenda = "1,9%";

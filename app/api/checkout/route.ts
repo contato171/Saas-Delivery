@@ -1,17 +1,17 @@
 export const dynamic = 'force-dynamic';
-import { stripe } from "../../../lib/stripe"; // Ajuste esse caminho se necessário
+import { stripe } from "../../../lib/stripe";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 export async function POST(req: Request) {
   try {
-    // 1. A MÁGICA CONTRA O ERRO DA VERCEL: Inicializa o Supabase AQUI DENTRO!
     const supabaseAdmin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL as string,
       process.env.SUPABASE_SERVICE_ROLE_KEY as string
     );
 
-    const { type, tenantId, priceId, amount } = await req.json();
+    // Recebendo o paymentMethod do frontend
+    const { type, tenantId, priceId, amount, paymentMethod } = await req.json();
 
     if (!tenantId) {
       return NextResponse.json({ error: "Tenant ID é obrigatório" }, { status: 400 });
@@ -19,7 +19,6 @@ export async function POST(req: Request) {
 
     const baseUrl = process.env.NEXT_PUBLIC_URL || "https://saas-delivery-seven.vercel.app";
 
-    // 2. Busca os dados do Lojista no banco
     const { data: tenant } = await supabaseAdmin
       .from("tenants")
       .select("*")
@@ -30,7 +29,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Lojista não encontrado" }, { status: 404 });
     }
 
-    // 3. Gerencia o Cliente na Stripe
     let stripeCustomerId = tenant.stripe_customer_id;
 
     if (!stripeCustomerId) {
@@ -68,19 +66,19 @@ export async function POST(req: Request) {
     else if (type === "topup") {
       if (!amount) return NextResponse.json({ error: "Valor ausente para recarga" }, { status: 400 });
 
+      // Lógica separada: É Pix ou Cartão?
+      const isPix = paymentMethod === "pix";
+
       sessionConfig = {
         ...sessionConfig,
         mode: "payment",
-        payment_method_types: ["card", "pix"], 
-        payment_intent_data: {
-          setup_future_usage: "off_session", 
-        },
+        payment_method_types: isPix ? ["pix"] : ["card"], 
         line_items: [
           {
             price_data: {
               currency: "brl",
               product_data: {
-                name: "Recarga de Carteira (Taxas Delivery IA)",
+                name: "Recarga de Carteira (Taxas)",
                 description: "Saldo pré-pago para processamento de pedidos.",
               },
               unit_amount: Math.round(amount * 100), 
@@ -90,6 +88,14 @@ export async function POST(req: Request) {
         ],
         metadata: { type: "topup", tenantId: tenantId, amount: amount.toString() },
       };
+
+      // Só pede para salvar cobrança futura (off_session) SE FOR CARTÃO
+      if (!isPix) {
+        sessionConfig.payment_intent_data = {
+          setup_future_usage: "off_session", 
+        };
+      }
+
     } else {
       return NextResponse.json({ error: "Tipo de cobrança inválido" }, { status: 400 });
     }
