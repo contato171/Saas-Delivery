@@ -38,7 +38,7 @@ export default function PoliticaPrivacidade() {
           <section>
             <h2 className="text-xl font-bold text-zinc-900 mb-3">4. Compartilhamento de Dados</h2>
             <p>
-              O Delivery IA <strong>não vende, aluga ou compartilha</strong> seus dados pessoais com terceiros para fins de marketing. Seus dados são compartilhados apenas com prestadores de serviços essenciais para o funcionamento da plataforma, como a Stripe (para pagamentos) e a Meta (para veiculação dos seus próprios anúncios).
+              O Nexus Delivery <strong>não vende, aluga ou compartilha</strong> seus dados pessoais com terceiros para fins de marketing. Seus dados são compartilhados apenas com prestadores de serviços essenciais para o funcionamento da plataforma, como a Stripe (para pagamentos) e a Meta (para veiculação dos seus próprios anúncios).
             </p>
           </section>
 
