@@ -50,7 +50,7 @@ export default function Home() {
       {/* FOOTER SIMPLES */}
       <footer className="py-12 border-t border-zinc-100 bg-white">
         <div className="max-w-7xl mx-auto px-6 text-center text-zinc-400 text-sm font-medium">
-          <p>© 2026 SaaS Delivery IA. Todos os direitos reservados.</p>
+          <p>© 2026 SaaS Nexus Delivery. Todos os direitos reservados.</p>
         </div>
       </footer>
     </main>
