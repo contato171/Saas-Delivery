@@ -84,9 +84,12 @@ export default function GestaoIntegracoes({ tenantId }: { tenantId: string }) {
 
   const handleConectarFacebook = () => {
     setConectandoAuth(true);
-    const appId = "4223060334506886"; // SEU APP ID
+    // Agora ele puxa dinâmico da Vercel
+    const appId = process.env.NEXT_PUBLIC_META_APP_ID; 
     const redirectUri = encodeURIComponent(`${window.location.origin}/api/meta/callback`);
     const scope = "ads_management,pages_manage_ads,pages_read_engagement,business_management";
+    
+    // O "state" envia o ID do lojista atual para sabermos de quem é a conta quando o Facebook responder
     window.location.href = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&state=${tenantId}&scope=${scope}`;
   };
 

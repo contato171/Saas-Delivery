@@ -1,59 +1,67 @@
 export const dynamic = 'force-dynamic';
-import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase'; // Ajuste o caminho se o seu supabase.ts estiver noutra pasta
+import { NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 
-export async function GET(request: Request) {
+export async function GET(req: Request) {
+  // 1. Pega os parâmetros que o Facebook mandou na URL
+  const { searchParams } = new URL(req.url);
+  const code = searchParams.get("code");
+  const tenantId = searchParams.get("state"); // Nós mandamos o ID do lojista escondido no "state"
+  const error = searchParams.get("error");
+
+  const baseUrl = process.env.NEXT_PUBLIC_URL || "https://saas-delivery-seven.vercel.app";
+
+  // Se o lojista clicou em "Cancelar" na tela do Facebook
+  if (error) {
+    return NextResponse.redirect(`${baseUrl}/painel?erro_meta=${error}`);
+  }
+
+  if (!code || !tenantId) {
+    return NextResponse.redirect(`${baseUrl}/painel?erro_meta=dados_ausentes`);
+  }
+
+  const appId = process.env.NEXT_PUBLIC_META_APP_ID;
+  const appSecret = process.env.META_APP_SECRET;
+  const redirectUri = `${baseUrl}/api/meta/callback`;
+
   try {
-    // 1. Pegamos os dados que a Meta mandou no URL (O código de autorização e o ID do seu cliente)
-    const { searchParams } = new URL(request.url);
-    const code = searchParams.get('code');
-    const tenantId = searchParams.get('state'); 
-    
-    // Se o cliente cancelou o login, redirecionamos para o painel com erro
-    if (!code || !tenantId) {
-      return NextResponse.redirect(new URL('/painel?erro=login_cancelado', request.url));
-    }
-
-    // 🚨 COLOQUE AQUI AS SUAS CHAVES DA META (Da Etapa 1)
-    const APP_ID = "4223060334506886"; 
-    const APP_SECRET = "ca87aaa2e1e3489f7d6ae1fe6a254639"; 
-    
-    // A rota exata onde estamos
-    const REDIRECT_URI = `${new URL(request.url).origin}/api/meta/callback`;
-
-    // ==========================================
-    // 2. TROCAR O "CÓDIGO" PELO "ACCESS TOKEN" OFICIAL
-    // ==========================================
-    const tokenResponse = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?client_id=${APP_ID}&redirect_uri=${REDIRECT_URI}&client_secret=${APP_SECRET}&code=${code}`);
+    // 2. Troca o "código" temporário pela Chave Mestra (Access Token)
+    const tokenResponse = await fetch(
+      `https://graph.facebook.com/v19.0/oauth/access_token?client_id=${appId}&redirect_uri=${encodeURIComponent(redirectUri)}&client_secret=${appSecret}&code=${code}`
+    );
     const tokenData = await tokenResponse.json();
 
     if (tokenData.error) {
-      throw new Error(`Erro ao gerar token: ${tokenData.error.message}`);
+      console.error("Erro Meta API:", tokenData.error);
+      return NextResponse.redirect(`${baseUrl}/painel?erro_meta=falha_token`);
     }
 
     const accessToken = tokenData.access_token;
 
-    // ==========================================
-    // 3. GUARDAR O TOKEN NO BANCO DE DADOS (SUPABASE)
-    // ==========================================
-    // O seu sistema vai guardar este token ligado ao ID do restaurante
-    const { error: dbError } = await supabase
-      .from('tenant_integrations')
+    // 3. Salva a Chave Mestra no banco de dados do lojista
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL as string,
+      process.env.SUPABASE_SERVICE_ROLE_KEY as string
+    );
+
+    const { error: dbError } = await supabaseAdmin
+      .from("tenant_integrations")
       .upsert({ 
         tenant_id: tenantId, 
-        facebook_access_token: accessToken,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'tenant_id' }); // Atualiza se já existir
+        facebook_access_token: accessToken 
+      }, { onConflict: 'tenant_id' }); 
 
-    if (dbError) throw new Error(`Erro no BD: ${dbError.message}`);
+    if (dbError) {
+       console.error("Erro DB:", dbError);
+       return NextResponse.redirect(`${baseUrl}/painel?erro_meta=falha_db`);
+    }
 
-    // ==========================================
-    // 4. DEVOLVER O CLIENTE AO PAINEL COM SUCESSO
-    // ==========================================
-    return NextResponse.redirect(new URL('/painel?sucesso=meta_conectado', request.url));
+    // 4. Redireciona o lojista de volta para o painel dele com sucesso!
+    // Você pode ler esse "sucesso_meta=true" no frontend para mostrar um alerta verdinho se quiser
+    return NextResponse.redirect(`${baseUrl}/painel?sucesso_meta=true`);
 
-  } catch (error: any) {
-    console.error("❌ ERRO NO CALLBACK META:", error);
-    return NextResponse.redirect(new URL(`/painel?erro=${encodeURIComponent(error.message)}`, request.url));
+  } catch (err) {
+    console.error("Erro Callback Meta:", err);
+    return NextResponse.redirect(`${baseUrl}/painel?erro_meta=excecao`);
   }
 }
