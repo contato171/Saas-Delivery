@@ -11,7 +11,7 @@ export default function PoliticaPrivacidade() {
           <section>
             <h2 className="text-xl font-bold text-zinc-900 mb-3">1. Introdução</h2>
             <p>
-              Bem-vindo ao <strong>Delivery IA</strong>. Nós respeitamos a sua privacidade e estamos comprometidos em proteger os seus dados pessoais. Esta política explica como coletamos, usamos e protegemos as suas informações ao utilizar a nossa plataforma de gestão, CRM e automação de marketing digital.
+              Bem-vindo ao <strong>Nexus Delivery</strong>. Nós respeitamos a sua privacidade e estamos comprometidos em proteger os seus dados pessoais. Esta política explica como coletamos, usamos e protegemos as suas informações ao utilizar a nossa plataforma de gestão, CRM e automação de marketing digital.
             </p>
           </section>
 
