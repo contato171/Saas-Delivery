@@ -118,7 +118,7 @@ export default function PainelLojista() {
           <div className="bg-zinc-900/80 backdrop-blur-xl p-10 rounded-3xl max-w-lg w-full border border-zinc-800 shadow-[0_0_60px_-15px_rgba(0,0,0,0.7)] flex flex-col">
             <div className="flex items-center gap-3 mb-10">
               <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-blue-500/20">D</div>
-              <h1 className="text-3xl font-black text-white tracking-tighter">Delivery <span className="text-blue-500">IA</span></h1>
+              <h1 className="text-3xl font-black text-white tracking-tighter">Nexus <span className="text-blue-500">Delivery</span></h1>
             </div>
 
             <div className="flex gap-1 mb-10 bg-zinc-950 p-1.5 rounded-full border border-zinc-800">
@@ -191,7 +191,7 @@ export default function PainelLojista() {
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white flex items-center justify-center font-black text-xl shadow-md">
              {tenant.name.charAt(0)}
           </div>
-          <h2 className="font-black text-xl text-zinc-900 tracking-tight truncate">Delivery<span className="text-indigo-600">IA</span></h2>
+          <h2 className="font-black text-xl text-zinc-900 tracking-tight truncate">Nexus<span className="text-indigo-600">Delivery</span></h2>
         </div>
 
         {/* CARD PLANO PRO ATIVO COM DETALHES DE DATA */}
