@@ -104,69 +104,62 @@ export default function PainelLojista() {
     setTenant(null); setEmail(""); setSenha("");
   };
 
-  if (loading && !tenant) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center"><div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div></div>;
+  if (loading && !tenant) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center"><div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div></div>;
 
   if (!tenant) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex flex-col md:flex-row relative overflow-hidden font-sans">
-        <div className="absolute inset-0 opacity-20 pointer-events-none">
-          <div className="absolute -inset-x-20 -top-40 h-[600px] bg-gradient-to-r from-blue-600 to-indigo-700 blur-[120px] rounded-full animate-pulse"></div>
-          <div className="absolute -inset-x-20 -bottom-40 h-[600px] bg-gradient-to-r from-purple-700 to-pink-600 blur-[120px] rounded-full animate-pulseDelay"></div>
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center relative overflow-hidden font-sans p-6">
+        {/* Efeitos de Fundo Modernos */}
+        <div className="absolute inset-0 opacity-20 pointer-events-none flex items-center justify-center">
+          <div className="absolute h-[600px] w-[600px] bg-gradient-to-r from-indigo-600 to-purple-700 blur-[120px] rounded-full animate-pulse"></div>
         </div>
 
-        <div className="flex-1 flex items-center justify-center p-6 md:p-12 z-10 animate-in fade-in slide-in-from-left duration-700">
-          <div className="bg-zinc-900/80 backdrop-blur-xl p-10 rounded-3xl max-w-lg w-full border border-zinc-800 shadow-[0_0_60px_-15px_rgba(0,0,0,0.7)] flex flex-col">
-            <div className="flex items-center gap-3 mb-10">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-700 rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-blue-500/20">D</div>
-              <h1 className="text-3xl font-black text-white tracking-tighter">Nexus <span className="text-blue-500">Delivery</span></h1>
+        <div className="z-10 animate-in fade-in zoom-in-95 duration-700 w-full max-w-md">
+          <div className="bg-zinc-900/80 backdrop-blur-xl p-10 rounded-3xl border border-zinc-800 shadow-[0_0_60px_-15px_rgba(0,0,0,0.7)] flex flex-col">
+            
+            {/* Header com Logo Animada */}
+            <div className="flex flex-col items-center gap-4 mb-10">
+              {/* DICA: Para usar a sua imagem PNG, comente a div abaixo e descomente a tag img */}
+              {/* <img src="/logo-nexus.png" alt="Nexus Delivery" className="w-16 h-16 animate-[bounce_3s_infinite]" /> */}
+              
+              <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center text-white font-black text-3xl shadow-[0_0_20px_rgba(99,102,241,0.4)] animate-[bounce_3s_infinite]">
+                N
+              </div>
+              <h1 className="text-3xl font-black text-white tracking-tighter">Nexus <span className="text-indigo-400">Delivery</span></h1>
             </div>
 
-            <div className="flex gap-1 mb-10 bg-zinc-950 p-1.5 rounded-full border border-zinc-800">
+            <div className="flex gap-1 mb-8 bg-zinc-950 p-1.5 rounded-full border border-zinc-800">
               <button onClick={() => setModoAuth("login")} className={`flex-1 font-bold text-center py-3 rounded-full text-sm transition-all duration-300 ${modoAuth === "login" ? "bg-zinc-800 text-white shadow" : "text-zinc-500 hover:text-zinc-300"}`}>Entrar</button>
               <button onClick={() => setModoAuth("cadastro")} className={`flex-1 font-bold text-center py-3 rounded-full text-sm transition-all duration-300 ${modoAuth === "cadastro" ? "bg-zinc-800 text-white shadow" : "text-zinc-500 hover:text-zinc-300"}`}>Criar Conta</button>
             </div>
 
             {modoAuth === "login" ? (
-              <form onSubmit={fazerLogin} className="flex flex-col gap-5 animate-in fade-in">
-                <div className="mb-4"><h2 className="text-3xl font-black text-white leading-tight tracking-tighter">Aceder ao seu Painel</h2><p className="text-zinc-400 mt-2">Bem-vindo de volta!</p></div>
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Seu e-mail" className="w-full px-5 py-4 bg-zinc-950/70 border border-zinc-800 rounded-2xl text-white focus:ring-2 focus:ring-blue-500 outline-none" required />
-                <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Sua senha" className="w-full px-5 py-4 bg-zinc-950/70 border border-zinc-800 rounded-2xl text-white focus:ring-2 focus:ring-blue-500 outline-none" required />
-                <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-extrabold py-4 mt-6 rounded-2xl shadow-lg">{loading ? "Verificando..." : "Aceder Máquina de Vendas"}</button>
+              <form onSubmit={fazerLogin} className="flex flex-col gap-4 animate-in fade-in">
+                <div className="text-center mb-4">
+                  <h2 className="text-2xl font-black text-white leading-tight tracking-tighter">Acessar Painel Nexus</h2>
+                  <p className="text-zinc-400 mt-2 text-sm">Bem-vindo de volta!</p>
+                </div>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Seu e-mail" className="w-full px-5 py-4 bg-zinc-950/70 border border-zinc-800 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all" required />
+                <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Sua senha" className="w-full px-5 py-4 bg-zinc-950/70 border border-zinc-800 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all" required />
+                <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-extrabold py-4 mt-4 rounded-2xl shadow-lg hover:scale-[1.02] transition-transform">{loading ? "Verificando..." : "Acessar Nexus"}</button>
               </form>
             ) : (
-              <form onSubmit={fazerCadastro} className="flex flex-col gap-5 animate-in fade-in">
-                <div className="mb-4"><h2 className="text-3xl font-black text-white leading-tight tracking-tighter">Começar a Vender</h2><p className="text-zinc-400 mt-2">Configure sua loja digital.</p></div>
-                <input type="text" value={nomeRestaurante} onChange={(e) => setNomeRestaurante(e.target.value)} placeholder="Nome do Restaurante" className="w-full px-5 py-4 bg-zinc-950/70 border border-zinc-800 rounded-2xl text-white focus:ring-2 focus:ring-blue-500 outline-none" required />
-                {slugGerado && <div className="flex items-center bg-zinc-950/40 border border-zinc-800 border-dashed rounded-2xl px-5 py-4 opacity-80 text-sm"><span className="text-zinc-600">seuapp.com/</span><span className="text-blue-400 font-bold ml-1 tracking-tight">{slugGerado}</span></div>}
-                <input type="text" value={nomeResponsavel} onChange={(e) => setNomeResponsavel(e.target.value)} placeholder="Nome do Responsável" className="w-full px-5 py-4 bg-zinc-950/70 border border-zinc-800 rounded-2xl text-white focus:ring-2 focus:ring-blue-500 outline-none" required />
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-mail profissional" className="w-full px-5 py-4 bg-zinc-950/70 border border-zinc-800 rounded-2xl text-white focus:ring-2 focus:ring-blue-500 outline-none" required />
-                <div className="flex gap-3">
-                  <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Criar Senha" className="w-full px-5 py-4 bg-zinc-950/70 border border-zinc-800 rounded-2xl text-white focus:ring-2 focus:ring-blue-500 outline-none" required />
-                  <input type="password" value={confirmarSenha} onChange={(e) => setConfirmarSenha(e.target.value)} placeholder="Confirmar" className="w-full px-5 py-4 bg-zinc-950/70 border border-zinc-800 rounded-2xl text-white focus:ring-2 focus:ring-blue-500 outline-none" required />
+              <form onSubmit={fazerCadastro} className="flex flex-col gap-4 animate-in fade-in">
+                <div className="text-center mb-4">
+                  <h2 className="text-2xl font-black text-white leading-tight tracking-tighter">Começar a Vender</h2>
+                  <p className="text-zinc-400 mt-2 text-sm">Configure sua operação digital.</p>
                 </div>
-                <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white font-extrabold py-4 mt-6 rounded-2xl shadow-lg">{loading ? "Criando..." : "Lançar Minha Máquina de Vendas"}</button>
+                <input type="text" value={nomeRestaurante} onChange={(e) => setNomeRestaurante(e.target.value)} placeholder="Nome do Restaurante" className="w-full px-5 py-3 bg-zinc-950/70 border border-zinc-800 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all" required />
+                {slugGerado && <div className="flex items-center bg-zinc-950/40 border border-zinc-800 border-dashed rounded-2xl px-5 py-3 opacity-80 text-xs"><span className="text-zinc-500">seuapp.com/</span><span className="text-indigo-400 font-bold ml-1 tracking-tight">{slugGerado}</span></div>}
+                <input type="text" value={nomeResponsavel} onChange={(e) => setNomeResponsavel(e.target.value)} placeholder="Nome do Responsável" className="w-full px-5 py-3 bg-zinc-950/70 border border-zinc-800 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all" required />
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-mail profissional" className="w-full px-5 py-3 bg-zinc-950/70 border border-zinc-800 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all" required />
+                <div className="flex gap-3">
+                  <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Criar Senha" className="w-full px-5 py-3 bg-zinc-950/70 border border-zinc-800 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all" required />
+                  <input type="password" value={confirmarSenha} onChange={(e) => setConfirmarSenha(e.target.value)} placeholder="Confirmar" className="w-full px-5 py-3 bg-zinc-950/70 border border-zinc-800 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all" required />
+                </div>
+                <button type="submit" disabled={loading} className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-extrabold py-4 mt-4 rounded-2xl shadow-lg hover:scale-[1.02] transition-transform">{loading ? "Criando..." : "Criar Conta Nexus"}</button>
               </form>
             )}
-          </div>
-        </div>
-
-        <div className="flex-1 bg-zinc-900 md:flex flex-col items-center justify-center p-10 md:p-20 relative z-0 border-l border-zinc-800 animate-in fade-in slide-in-from-right duration-700">
-          <div className="max-w-2xl text-center md:text-left">
-            <h1 className="text-5xl md:text-6xl font-black text-white leading-[0.95] tracking-tighter mb-6">Abra sua <br /> Máquina de Vendas <span className="text-transparent bg-clip-text bg-gradient-to-br from-blue-400 to-blue-600">Digital</span>.</h1>
-            <p className="text-xl text-zinc-400 mb-16 max-w-xl">Nossa IA gerencia seu marketing, atrai clientes e otimiza sua operação.</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl">
-              {[
-                { icon: "✨", title: "Marketing com IA", desc: "Campanhas automáticas no Insta e Google Ads.", shadow: "shadow-blue-500/10" },
-                { icon: "🧾", title: "Gestão Sem Taxas", desc: "Cardápio digital próprio.", shadow: "shadow-purple-500/10" },
-                { icon: "👥", title: "CRM & Retenção", desc: "Venda mais de uma vez para a mesma pessoa.", shadow: "shadow-pink-500/10" },
-                { icon: "🚀", title: "Pedidos Ao Vivo", desc: "Painel agilizado para cozinha e entregadores.", shadow: "shadow-emerald-500/10" }
-              ].map((item, idx) => (
-                <div key={idx} className={`bg-zinc-800/60 p-6 rounded-2xl border border-zinc-700 flex items-start gap-4 shadow-lg ${item.shadow} hover:scale-[1.02] transition-all`}>
-                  <div className="text-3xl mt-1">{item.icon}</div>
-                  <div><h4 className="font-extrabold text-white text-lg tracking-tight">{item.title}</h4><p className="text-sm text-zinc-400 mt-1 leading-relaxed">{item.desc}</p></div>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
       </div>
@@ -201,7 +194,7 @@ export default function PainelLojista() {
             <p className="text-xs text-zinc-500 font-medium mb-4">Estabelecimento</p>
             
             <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider mb-1">Plano Atual:</p>
-            <div className="inline-block bg-blue-600 text-white font-bold text-xs px-3 py-1 rounded-full mb-3 shadow-sm shadow-blue-600/30">
+            <div className="inline-block bg-indigo-600 text-white font-bold text-xs px-3 py-1 rounded-full mb-3 shadow-sm shadow-indigo-600/30">
               {planoNome}
             </div>
 
