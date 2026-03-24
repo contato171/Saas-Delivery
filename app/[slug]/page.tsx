@@ -28,61 +28,66 @@ export default function VitrineLoja() {
 
   useEffect(() => {
     if (slug) {
-      carregarLoja();
+      carregarLojaOtimizada();
     }
   }, [slug]);
 
- const carregarLoja = async () => {
+  // ==========================================
+  // BUSCA COM CACHE GLOBAL E LOCAL
+  // ==========================================
+  const carregarLojaOtimizada = async () => {
     setLoading(true);
 
-    // ==========================================
-    // SISTEMA DE CACHE (Economiza Banco de Dados)
-    // ==========================================
-    const CACHE_KEY = `@saas_menu_${slug}`;
-    const CACHE_TIME = 1000 * 60 * 15; // 15 minutos de validade do cache
+    try {
+      // 1. CHAVE DO CACHE PARA A SESSÃO ATUAL
+      const SESSION_CACHE_KEY = `@nexus_menu_${slug}`;
+      const CACHE_VALIDITY_MS = 1000 * 60 * 5; // 5 minutos de validade no celular do cliente
 
-    if (typeof window !== "undefined") {
-      const cacheSalvo = localStorage.getItem(CACHE_KEY);
-      if (cacheSalvo) {
-        const { data, timestamp } = JSON.parse(cacheSalvo);
-        
-        // Se o cache ainda estiver dentro dos 15 minutos, usa ele e aborta o Supabase
-        if (Date.now() - timestamp < CACHE_TIME) {
-          setTenant(data.tenant);
-          setProdutos(data.produtos);
-          setLoading(false);
-          return; // Pula a requisição ao banco!
+      if (typeof window !== "undefined") {
+        const cacheSalvo = sessionStorage.getItem(SESSION_CACHE_KEY); // Usando sessionStorage para limpar ao fechar a aba
+        if (cacheSalvo) {
+          const { data, timestamp } = JSON.parse(cacheSalvo);
+          if (Date.now() - timestamp < CACHE_VALIDITY_MS) {
+            setTenant(data.tenant);
+            setProdutos(data.produtos);
+            setLoading(false);
+            return; 
+          }
         }
       }
-    }
 
-    // Se não tiver cache ou estiver vencido, busca no banco de dados
-    const { data: tenantData } = await supabase
-      .from("tenants")
-      .select("*")
-      .eq("slug", slug)
-      .single();
+      // 2. BUSCA NO BANCO DE DADOS
+      // Esta requisição será otimizada internamente pelo Next.js App Router (se a Vercel interceptar)
+      const { data: tenantData } = await supabase
+        .from("tenants")
+        .select("*")
+        .eq("slug", slug)
+        .single();
 
-    if (tenantData) {
-      setTenant(tenantData);
-      
-      const { data: produtosData } = await supabase
-        .from("products")
-        .select("*, categories(name)") 
-        .eq("tenant_id", tenantData.id)
-        .order("name", { ascending: true }); 
+      if (tenantData) {
+        setTenant(tenantData);
+        
+        const { data: produtosData } = await supabase
+          .from("products")
+          .select("*, categories(name)") 
+          .eq("tenant_id", tenantData.id)
+          .order("name", { ascending: true }); 
 
-      setProdutos(produtosData || []);
+        setProdutos(produtosData || []);
 
-      // Salva os dados frescos no Cache do celular do cliente
-      if (typeof window !== "undefined") {
-        localStorage.setItem(CACHE_KEY, JSON.stringify({
-          data: { tenant: tenantData, produtos: produtosData || [] },
-          timestamp: Date.now()
-        }));
+        // 3. SALVA O CACHE RÁPIDO NO CLIENTE
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem(SESSION_CACHE_KEY, JSON.stringify({
+            data: { tenant: tenantData, produtos: produtosData || [] },
+            timestamp: Date.now()
+          }));
+        }
       }
+    } catch (error) {
+      console.error("Erro ao carregar cardápio:", error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   // ========================================================
