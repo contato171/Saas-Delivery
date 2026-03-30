@@ -6,7 +6,6 @@ const CartContext = createContext<any>(null);
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [itens, setItens] = useState<any[]>([]);
-  // O cupom agora mora no Cérebro do sistema, não nas telas!
   const [cupomAtivo, setCupomAtivo] = useState<{codigo: string, desconto: number} | null>(null);
 
   // Carrega a sacola salva
@@ -22,7 +21,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("@saas_cart", JSON.stringify(itens));
   }, [itens]);
 
-  const adicionarItem = (produto: any, quantidade: number, adicionais: any[] = [], observacao: string = "") => {
+  // Modificado: Adicionamos variacao no final para não quebrar produtos normais
+  const adicionarItem = (produto: any, quantidade: number, adicionais: any[] = [], observacao: string = "", variacao: string | null = null) => {
     // MATEMÁTICA CORRETA: Preço do Produto + Soma de todos os adicionais * Quantidade
     const valorAdicionais = adicionais.reduce((acc, add) => acc + Number(add.price), 0);
     const precoUnitario = Number(produto.price) + valorAdicionais;
@@ -34,6 +34,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       quantidade,
       adicionais,
       observacao,
+      variacao, // <--- Aqui o sabor entra no item do carrinho
       precoTotal
     };
 

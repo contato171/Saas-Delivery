@@ -196,19 +196,25 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
       const { data: pedidoSalvo, error } = await supabase.from("orders").insert([{ tenant_id: tenantId, customer_name: nomeCliente, customer_address: enderecoFinal, payment_method: metodoFinal, total_amount: totalGeral, status: 'pendente' }]).select().single();
       if (error) throw error;
 
+      // ATUALIZADO: Salva a variação no banco de dados se existir
       const itensParaSalvar = itens.map((item: any) => {
         let textoOpcoes = "";
-        if (item.adicionais && item.adicionais.length > 0) textoOpcoes += "Adicionais:\n" + item.adicionais.map((add: any) => `- ${add.name}`).join("\n");
-        if (item.observacao) textoOpcoes += (textoOpcoes ? "\n" : "") + "Obs: " + item.observacao;
+        if (item.variacao) textoOpcoes += `Sabor/Opção: ${item.variacao}\n`;
+        if (item.adicionais && item.adicionais.length > 0) textoOpcoes += "Adicionais:\n" + item.adicionais.map((add: any) => `- ${add.name}`).join("\n") + "\n";
+        if (item.observacao) textoOpcoes += "Obs: " + item.observacao;
         if (cpf) textoOpcoes += `\nCPF na Nota: ${cpf}`;
-        return { order_id: pedidoSalvo.id, product_name: item.produto.name, quantity: item.quantidade, unit_price: item.produto.price, options_text: textoOpcoes };
+        
+        return { 
+          order_id: pedidoSalvo.id, 
+          product_name: item.produto.name, 
+          quantity: item.quantidade, 
+          unit_price: item.produto.price, 
+          options_text: textoOpcoes.trim() 
+        };
       });
       await supabase.from("order_items").insert(itensParaSalvar);
 
-      // ========================================================
-      // MÁGICA DO PIXEL 5: O EVENTO DE COMPRA (PURCHASE)
-      // Aqui a Meta registra o valor de faturamento gerado pelas campanhas!
-      // ========================================================
+      // MÁGICA DO PIXEL 5: Purchase
       // @ts-ignore
       if (typeof window !== "undefined" && window.fbq) {
         // @ts-ignore
@@ -221,10 +227,17 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
         });
       }
 
+      // ATUALIZADO: Inclui a variação na mensagem do WhatsApp
       let textoPedido = `*NOVO PEDIDO!* 🚀\n*ID:* #${pedidoSalvo.id.split('-')[0].toUpperCase()}\n\n*Cliente:* ${nomeCliente}\n*Contato:* ${telefoneCliente}\n*Tipo:* ${tipoEntrega === 'entrega' ? '🛵 Entrega' : '🏃‍♂️ Retirada'}\n`;
       if (tipoEntrega === 'entrega') { textoPedido += `*Endereço:* ${enderecoFinal}\n`; if (distanciaReal) textoPedido += `*Distância:* ${distanciaReal.toFixed(1)} km\n`; }
       textoPedido += `*Pagamento:* ${metodoFinal}\n\n*🛒 ITENS:*\n`;
-      itens.forEach((item: any) => { textoPedido += `${item.quantidade}x ${item.produto.name} (R$ ${(item.precoTotal || 0).toFixed(2).replace('.', ',')})\n`; });
+      
+      itens.forEach((item: any) => { 
+        textoPedido += `${item.quantidade}x ${item.produto.name}`;
+        if (item.variacao) textoPedido += ` *(Sabor: ${item.variacao})*`;
+        textoPedido += ` (R$ ${(item.precoTotal || 0).toFixed(2).replace('.', ',')})\n`; 
+      });
+      
       textoPedido += `\nSubtotal: R$ ${subtotal.toFixed(2).replace(".", ",")}`;
       if (cupomAtivo) textoPedido += `\nDesconto (${cupomAtivo.desconto}%): - R$ ${valorDesconto.toFixed(2).replace(".", ",")}`;
       if (taxaEntrega > 0) textoPedido += `\nTaxa: R$ ${taxaEntrega.toFixed(2).replace(".", ",")}`;
@@ -360,6 +373,10 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
                 <div key={item.id} className="mb-4 last:mb-0 flex justify-between">
                   <div>
                     <p className="font-medium text-sm pr-2 text-zinc-900"><span className="font-black text-red-600">{item.quantidade}x</span> {item.produto.name}</p>
+                    {/* ATUALIZADO: Exibe a variação (sabor) no resumo lateral */}
+                    {item.variacao && (
+                      <p className="text-xs font-bold text-indigo-600 mt-0.5 ml-5">Sabor: {item.variacao}</p>
+                    )}
                     {item.adicionais && item.adicionais.length > 0 && (
                       <p className="text-xs text-zinc-500 mt-0.5 ml-5">+ {item.adicionais.map((a:any) => a.name).join(', ')}</p>
                     )}

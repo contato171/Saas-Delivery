@@ -29,13 +29,16 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
   const [imagemPreview, setImagemPreview] = useState<string | null>(null);
   
   const [produtosSelecionadosComp, setProdutosSelecionadosComp] = useState<string[]>([]);
+  
+  // ESTADO NOVO: Controle da digitação de Variações/Sabores
+  const [novaVariacao, setNovaVariacao] = useState("");
 
   // ESTADOS DE IMPORTAÇÃO CSV E BUSCA
   const [importando, setImportando] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [buscaProduto, setBuscaProduto] = useState("");
   
-  // ESTADO RESTAURADO: Controla quais categorias estão ABERTAS (padrão: todas fechadas, com memória)
+  // ESTADO RESTAURADO: Controla quais categorias estão ABERTAS
   const [categoriasAbertas, setCategoriasAbertas] = useState<Record<string, boolean>>(() => {
     if (typeof window !== "undefined") {
       const salvo = localStorage.getItem(`@saas_categorias_abertas_${tenantId}`);
@@ -65,14 +68,15 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
   const abrirModal = (tipo: string, item: any = null) => {
     setItemEditando(item);
     setImagemFile(null);
+    setNovaVariacao(""); // Limpa o input de variação ao abrir
     if (item) {
-      setFormData({ ...item });
+      setFormData({ ...item, variations: item.variations || [] });
       setImagemPreview(item.image_url || null);
       if (tipo === "complementos") {
         setProdutosSelecionadosComp(item.product_id ? [item.product_id] : []);
       }
     } else {
-      setFormData({});
+      setFormData({ variations: [] });
       setImagemPreview(null);
       setProdutosSelecionadosComp([]);
     }
@@ -86,6 +90,7 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
     setImagemFile(null);
     setImagemPreview(null);
     setProdutosSelecionadosComp([]);
+    setNovaVariacao("");
   };
 
   const handleFotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -126,13 +131,27 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
     }
   };
 
-  // MÁGICA: Abre/Fecha a sanfona e salva no cache do navegador
   const toggleCategoriaVisivel = (categoriaNome: string) => {
     setCategoriasAbertas(prev => {
       const novoEstado = { ...prev, [categoriaNome]: !prev[categoriaNome] };
       localStorage.setItem(`@saas_categorias_abertas_${tenantId}`, JSON.stringify(novoEstado));
       return novoEstado;
     });
+  };
+
+  // FUNÇÕES NOVAS DE VARIAÇÃO
+  const addVariacao = () => {
+    if (novaVariacao.trim() === "") return;
+    const currentVars = formData.variations || [];
+    if (!currentVars.includes(novaVariacao.trim())) {
+      setFormData({ ...formData, variations: [...currentVars, novaVariacao.trim()] });
+    }
+    setNovaVariacao("");
+  };
+
+  const removeVariacao = (indexToRemove: number) => {
+    const currentVars = formData.variations || [];
+    setFormData({ ...formData, variations: currentVars.filter((_, idx) => idx !== indexToRemove) });
   };
 
   const salvarItem = async () => {
@@ -398,7 +417,7 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
             <p className="col-span-full py-10 text-center text-zinc-500 border-2 border-dashed border-zinc-200 rounded-2xl">Nenhum produto encontrado.</p>
           ) : (
             Object.keys(produtosAgrupados).sort().map(categoria => {
-              const estaAberta = categoriasAbertas[categoria]; // Se for true, mostra a lista. Padrão é undefined (fechada).
+              const estaAberta = categoriasAbertas[categoria]; 
               
               return (
                 <div key={categoria} className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden transition-all">
@@ -429,6 +448,14 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
                             <div className="flex-1">
                               <h4 className="font-bold text-zinc-900 line-clamp-1">{prod.name}</h4>
                               <p className="text-xs text-zinc-500 line-clamp-1 mt-0.5">{prod.description || "Sem descrição"}</p>
+                              {/* EXIBE AS TAGS DE VARIAÇÃO NO CARDÁPIO DO LOJISTA */}
+                              {prod.variations && prod.variations.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1.5">
+                                  {prod.variations.map((v: string, i: number) => (
+                                    <span key={i} className="bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2 py-0.5 rounded-full">{v}</span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           </div>
                           
@@ -524,6 +551,42 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
                 </div>
               )}
 
+              {/* === BLOCO NOVO: VARIAÇÕES / SABORES === */}
+              {activeTab === "produtos" && (
+                <div className="border-t border-zinc-100 pt-4 mt-2">
+                  <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Variações / Sabores (Opcional)</label>
+                  <p className="text-xs text-zinc-400 mb-3">Ex: Carne, Frango, P. Se adicionado, o cliente terá que escolher um.</p>
+                  
+                  <div className="flex gap-2 mb-3">
+                    <input 
+                      type="text" 
+                      value={novaVariacao} 
+                      onChange={e => setNovaVariacao(e.target.value)} 
+                      onKeyDown={e => e.key === 'Enter' && addVariacao()}
+                      className="flex-1 border border-zinc-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-600" 
+                      placeholder="Digite um sabor..." 
+                    />
+                    <button type="button" onClick={addVariacao} className="bg-zinc-800 hover:bg-zinc-900 text-white px-3 py-2 rounded-lg transition-colors">
+                      <Plus size={18}/>
+                    </button>
+                  </div>
+
+                  {formData.variations && formData.variations.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {formData.variations.map((varItem: string, idx: number) => (
+                        <span key={idx} className="bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold py-1.5 px-3 rounded-full flex items-center gap-2">
+                          {varItem}
+                          <button type="button" onClick={() => removeVariacao(idx)} className="text-indigo-400 hover:text-red-500 transition-colors">
+                            <X size={14}/>
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {/* === FIM BLOCO NOVO === */}
+
               {activeTab === "complementos" && (
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Vincular a quais Produtos?</label>
@@ -560,7 +623,7 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
               )}
 
               {activeTab !== "categorias" && (
-                <div>
+                <div className="border-t border-zinc-100 pt-4">
                   <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Preço (R$)</label>
                   <input type="number" step="0.01" value={formData.price || ""} onChange={e => setFormData({...formData, price: e.target.value})} className="w-full border border-zinc-300 rounded-lg p-3 text-sm font-bold text-zinc-900 outline-none focus:ring-2 focus:ring-indigo-600" placeholder="0.00" />
                 </div>

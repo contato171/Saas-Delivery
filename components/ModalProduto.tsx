@@ -17,6 +17,9 @@ export default function ModalProduto({ produto, tenantId, onClose }: { produto: 
   const [loadingGrupos, setLoadingGrupos] = useState(true);
 
   const [selecoes, setSelecionados] = useState<Record<string, number>>({});
+  
+  // ESTADO NOVO: Guarda o sabor/variação que o cliente escolheu
+  const [variacaoSelecionada, setVariacaoSelecionada] = useState<string | null>(null);
 
   useEffect(() => {
     async function buscarGrupos() {
@@ -31,7 +34,7 @@ export default function ModalProduto({ produto, tenantId, onClose }: { produto: 
     buscarGrupos();
   }, [produto.id]);
 
-  // MÁGICA DO PIXEL 2: ViewContent (Apenas quando abre o modal)
+  // MÁGICA DO PIXEL 2: ViewContent
   useEffect(() => {
     // @ts-ignore
     if (typeof window !== "undefined" && window.fbq) {
@@ -67,11 +70,17 @@ export default function ModalProduto({ produto, tenantId, onClose }: { produto: 
     }
   };
 
-  const isPodeAdicionar = gruposComplementos.every(grupo => {
+  // VERIFICAÇÃO ATUALIZADA: Checa complementos E se a variação foi escolhida (se existir)
+  const isComplementosOk = gruposComplementos.every(grupo => {
     if (!grupo.is_required) return true;
     const totalNoGrupo = grupo.complement_items.reduce((acc: number, curr: any) => acc + (selecoes[curr.id] || 0), 0);
     return totalNoGrupo >= grupo.min_items;
   });
+
+  const temVariacoes = produto.variations && produto.variations.length > 0;
+  const isVariacaoOk = temVariacoes ? variacaoSelecionada !== null : true;
+  
+  const isPodeAdicionar = isComplementosOk && isVariacaoOk;
 
   let valorExtraUnitario = 0;
   const listaFormatadaParaCarrinho: any[] = [];
@@ -109,7 +118,8 @@ export default function ModalProduto({ produto, tenantId, onClose }: { produto: 
     }
 
     if (adicionarProduto) {
-      adicionarProduto(produto, quantidadeGlobal, listaFormatadaParaCarrinho, observacao);
+      // Passa a variacaoSelecionada como o último parâmetro para o CartContext
+      adicionarProduto(produto, quantidadeGlobal, listaFormatadaParaCarrinho, observacao, variacaoSelecionada);
       onClose();
     }
   };
@@ -132,6 +142,35 @@ export default function ModalProduto({ produto, tenantId, onClose }: { produto: 
           <h2 className="text-2xl font-black text-zinc-900 leading-tight">{produto.name}</h2>
           <p className="text-zinc-500 text-sm mt-2 leading-relaxed">{produto.description}</p>
           <p className="text-xl font-black text-emerald-600 mt-4 border-b border-zinc-200 pb-6">R$ {Number(produto.price).toFixed(2).replace('.', ',')}</p>
+
+          {/* === BLOCO NOVO: EXIBIÇÃO DE VARIAÇÕES === */}
+          {temVariacoes && (
+            <div className="mt-6 bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm">
+               <div className="bg-zinc-100/50 p-4 flex justify-between items-start border-b border-zinc-200">
+                  <div>
+                    <h3 className="font-black text-zinc-900 uppercase tracking-tight">Escolha o Sabor/Opção</h3>
+                    <p className="text-xs font-bold text-zinc-500 mt-1">Escolha 1 opção obrigatória</p>
+                  </div>
+                  <div className="shrink-0 flex flex-col items-end gap-1">
+                    <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-md ${variacaoSelecionada ? "bg-emerald-100 text-emerald-700" : "bg-zinc-800 text-white"}`}>
+                      {variacaoSelecionada ? "Concluído" : "Obrigatório"}
+                    </span>
+                  </div>
+               </div>
+               <div className="p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {produto.variations.map((varItem: string, idx: number) => (
+                    <button 
+                      key={idx}
+                      onClick={() => setVariacaoSelecionada(varItem)}
+                      className={`py-3 px-2 rounded-xl text-sm font-bold border-2 transition-all flex items-center justify-center text-center ${variacaoSelecionada === varItem ? "border-red-600 bg-red-50 text-red-700 shadow-sm" : "border-zinc-200 bg-white text-zinc-600 hover:border-red-300"}`}
+                    >
+                      {varItem}
+                    </button>
+                  ))}
+               </div>
+            </div>
+          )}
+          {/* === FIM BLOCO VARIAÇÕES === */}
 
           {loadingGrupos ? (
             <div className="flex justify-center py-10"><Loader2 size={24} className="animate-spin text-zinc-400"/></div>
