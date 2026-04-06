@@ -46,9 +46,12 @@ export default function RadarAoVivo({ tenant }: { tenant: any }) {
         // 2. Se for só um "pulso" (ping), a gente para por aqui para não poluir o painel
         if (dado.tipo === 'ping') return; 
 
-        // 3. Atualiza o Feed Lateral com trava de segurança para o Localhost
+        // 3. Atualiza o Feed Lateral com trava de segurança e ID aleatório
         setEventosLog(prev => {
+          // Trava anti-duplicidade para o Localhost
           if (prev.length > 0 && prev[0].msg === dado.mensagem && prev[0].tipo === dado.tipo) return prev;
+          
+          // Usando Math.random para garantir que o ID nunca se repita e não dê tela vermelha
           const newLog = [{ id: Math.random().toString(36).substr(2, 9), msg: dado.mensagem, tipo: dado.tipo, tempo: 'Agora' }, ...prev];
           return newLog.slice(0, 15); 
         });

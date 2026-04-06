@@ -6,7 +6,7 @@ import { MapPin } from "lucide-react";
 
 const CartContext = createContext<any>(null);
 
-export function CartProvider({ children, tenantId }: { children: ReactNode, tenantId: string }) {
+export function CartProvider({ children, tenantId }: { children: ReactNode, tenantId?: string }) {
   const [itens, setItens] = useState<any[]>([]);
   const [cupomAtivo, setCupomAtivo] = useState<{codigo: string, desconto: number} | null>(null);
 
