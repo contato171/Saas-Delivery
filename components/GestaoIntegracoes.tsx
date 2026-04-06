@@ -14,22 +14,18 @@ export default function GestaoIntegracoes({ tenantId }: { tenantId: string }) {
   const [salvando, setSalvando] = useState(false);
   const [sucesso, setSucesso] = useState(false);
 
-  // Controle das Sanfonas
   const [secaoAberta, setSecaoAberta] = useState<string | null>("meta");
 
-  // Ativos da Meta
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [conectandoAuth, setConectandoAuth] = useState(false);
   const [paginasMeta, setPaginasMeta] = useState<any[]>([]);
   const [contasAnuncioMeta, setContasAnuncioMeta] = useState<any[]>([]);
   const [pixelsMeta, setPixelsMeta] = useState<any[]>([]);
 
-  // Seleções do Lojista
   const [paginaSelecionada, setPaginaSelecionada] = useState("");
   const [contaSelecionada, setContaSelecionada] = useState("");
   const [pixelSelecionado, setPixelSelecionado] = useState("");
   
-  // Google Analytics
   const [gaId, setGaId] = useState("");
 
   useEffect(() => {
@@ -65,7 +61,7 @@ export default function GestaoIntegracoes({ tenantId }: { tenantId: string }) {
       const contasData = await contasRes.json();
       if (contasData.data) setContasAnuncioMeta(contasData.data);
     } catch (error) {
-      console.error("Erro ao buscar ativos Meta:", error);
+      console.error("Error fetching Meta assets:", error);
     }
   };
 
@@ -84,12 +80,10 @@ export default function GestaoIntegracoes({ tenantId }: { tenantId: string }) {
 
   const handleConectarFacebook = () => {
     setConectandoAuth(true);
-    // Agora ele puxa dinâmico da Vercel
     const appId = process.env.NEXT_PUBLIC_META_APP_ID; 
     const redirectUri = encodeURIComponent(`${window.location.origin}/api/meta/callback`);
     const scope = "ads_management,pages_manage_ads,pages_read_engagement,business_management";
     
-    // O "state" envia o ID do lojista atual para sabermos de quem é a conta quando o Facebook responder
     window.location.href = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&state=${tenantId}&scope=${scope}`;
   };
 
@@ -107,7 +101,7 @@ export default function GestaoIntegracoes({ tenantId }: { tenantId: string }) {
       setSucesso(true);
       setTimeout(() => setSucesso(false), 3000);
     } else {
-      alert("Erro ao salvar configurações.");
+      alert("Error saving settings.");
     }
   };
 
@@ -115,18 +109,18 @@ export default function GestaoIntegracoes({ tenantId }: { tenantId: string }) {
     setSecaoAberta(secaoAberta === secao ? null : secao);
   };
 
-  if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-600" size={32}/></div>;
+  if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-indigo-600" size={32}/></div>;
 
   return (
     <div className="space-y-6 text-zinc-900 font-sans pb-20 animate-in fade-in max-w-4xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-black tracking-tight flex items-center gap-3"><Plug size={28} className="text-indigo-600"/> Integrações</h1>
-          <p className="text-zinc-500 mt-1">Conecte ferramentas externas para cruzar dados e automatizar seu delivery.</p>
+          <h1 className="text-3xl font-black tracking-tight flex items-center gap-3"><Plug size={28} className="text-indigo-600"/> Integrations</h1>
+          <p className="text-zinc-500 mt-1">Connect third-party tools to cross-reference data and automate your delivery.</p>
         </div>
         <button onClick={salvarConfiguracoes} disabled={salvando} className="bg-zinc-900 hover:bg-zinc-800 text-white font-bold py-3 px-8 rounded-xl transition-all flex items-center gap-2 shadow-md disabled:opacity-50">
           {salvando ? <Loader2 size={18} className="animate-spin"/> : sucesso ? <CheckCircle2 size={18}/> : <Save size={18}/>}
-          {sucesso ? "Salvo com Sucesso!" : "Salvar Tudo"}
+          {sucesso ? "Successfully Saved!" : "Save All"}
         </button>
       </div>
 
@@ -141,7 +135,7 @@ export default function GestaoIntegracoes({ tenantId }: { tenantId: string }) {
               </div>
               <div>
                 <h2 className="font-bold text-lg text-zinc-900">Meta Ads (Facebook & Instagram)</h2>
-                <p className="text-sm text-zinc-500">Configure a Inteligência Artificial e o Rastreador (Pixel).</p>
+                <p className="text-sm text-zinc-500">Configure AI Ad Generation and Pixel Tracking.</p>
               </div>
             </div>
             <div className="text-zinc-400">
@@ -153,31 +147,31 @@ export default function GestaoIntegracoes({ tenantId }: { tenantId: string }) {
             <div className="p-6 border-t border-zinc-100 bg-white space-y-8 animate-in slide-in-from-top-2">
               {!accessToken ? (
                 <div className="text-center py-6 bg-zinc-50 rounded-xl border border-zinc-200">
-                  <p className="text-zinc-600 mb-4">Você ainda não conectou sua conta do Facebook.</p>
+                  <p className="text-zinc-600 mb-4">You haven't connected your Facebook account yet.</p>
                   <button onClick={handleConectarFacebook} disabled={conectandoAuth} className="bg-[#1877F2] hover:bg-[#166fe5] transition text-white px-8 py-3 rounded-xl font-bold shadow-md disabled:opacity-70 flex items-center justify-center gap-2 mx-auto">
-                    {conectandoAuth ? <Loader2 size={18} className="animate-spin"/> : <Facebook size={18}/>} Conectar Conta da Meta
+                    {conectandoAuth ? <Loader2 size={18} className="animate-spin"/> : <Facebook size={18}/>} Connect Meta Account
                   </button>
                 </div>
               ) : (
                 <div className="space-y-6">
                   <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 p-3 rounded-lg border border-emerald-100">
                     <CheckCircle2 size={20}/>
-                    <span className="font-bold text-sm">Conta conectada e autenticada com sucesso!</span>
+                    <span className="font-bold text-sm">Account successfully connected and authenticated!</span>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-zinc-500 uppercase">Página Padrão da Loja</label>
+                      <label className="text-xs font-bold text-zinc-500 uppercase">Default Store Page</label>
                       <select value={paginaSelecionada} onChange={e => setPaginaSelecionada(e.target.value)} className="w-full border border-zinc-300 rounded-lg p-3 font-bold text-zinc-900 outline-none focus:ring-2 focus:ring-indigo-600">
-                        <option value="">Selecione a página...</option>
+                        <option value="">Select page...</option>
                         {paginasMeta.map(pag => <option key={pag.id} value={pag.id}>{pag.name}</option>)}
                       </select>
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-zinc-500 uppercase">Conta de Anúncios</label>
+                      <label className="text-xs font-bold text-zinc-500 uppercase">Ad Account</label>
                       <select value={contaSelecionada} onChange={e => setContaSelecionada(e.target.value)} className="w-full border border-zinc-300 rounded-lg p-3 font-bold text-zinc-900 outline-none focus:ring-2 focus:ring-indigo-600">
-                        <option value="">Selecione a conta...</option>
+                        <option value="">Select ad account...</option>
                         {contasAnuncioMeta.map(conta => <option key={conta.id} value={conta.id}>{conta.name}</option>)}
                       </select>
                     </div>
@@ -185,12 +179,12 @@ export default function GestaoIntegracoes({ tenantId }: { tenantId: string }) {
 
                   {contaSelecionada && (
                     <div className="space-y-2 pt-2 border-t border-zinc-100">
-                      <label className="text-xs font-bold text-zinc-500 uppercase">Pixel da Vitrine</label>
+                      <label className="text-xs font-bold text-zinc-500 uppercase">Store Pixel</label>
                       <select value={pixelSelecionado} onChange={e => setPixelSelecionado(e.target.value)} className="w-full border border-zinc-300 rounded-lg p-3 font-bold text-zinc-900 outline-none focus:ring-2 focus:ring-indigo-600">
-                        <option value="">Selecione o Pixel...</option>
-                        {pixelsMeta.length === 0 ? <option disabled>Nenhum pixel encontrado.</option> : pixelsMeta.map(pixel => <option key={pixel.id} value={pixel.id}>{pixel.name}</option>)}
+                        <option value="">Select Pixel...</option>
+                        {pixelsMeta.length === 0 ? <option disabled>No pixel found.</option> : pixelsMeta.map(pixel => <option key={pixel.id} value={pixel.id}>{pixel.name}</option>)}
                       </select>
-                      <p className="text-xs text-zinc-500 mt-1 flex items-center gap-1"><AlertCircle size={12}/> Este Pixel será instalado na sua vitrine para rastrear as vendas.</p>
+                      <p className="text-xs text-zinc-500 mt-1 flex items-center gap-1"><AlertCircle size={12}/> This Pixel will be installed in your digital menu to track sales.</p>
                     </div>
                   )}
                 </div>
@@ -208,7 +202,7 @@ export default function GestaoIntegracoes({ tenantId }: { tenantId: string }) {
               </div>
               <div>
                 <h2 className="font-bold text-lg text-zinc-900">Google Analytics (GA4)</h2>
-                <p className="text-sm text-zinc-500">Mensure visitas, tempo na página e comportamento dos clientes.</p>
+                <p className="text-sm text-zinc-500">Measure visits, page time, and customer behavior.</p>
               </div>
             </div>
             <div className="text-zinc-400">
@@ -219,11 +213,11 @@ export default function GestaoIntegracoes({ tenantId }: { tenantId: string }) {
           {secaoAberta === 'google' && (
             <div className="p-6 border-t border-zinc-100 bg-white space-y-6 animate-in slide-in-from-top-2">
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                <p className="text-sm text-amber-800 font-medium">Conecte o GA4 para cruzar dados de acesso com suas vendas. O código começa com <strong className="font-black">G-</strong>.</p>
+                <p className="text-sm text-amber-800 font-medium">Connect GA4 to cross-reference access data with your sales. The code starts with <strong className="font-black">G-</strong>.</p>
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-bold text-zinc-500 uppercase">ID da Métrica (Measurement ID)</label>
+                <label className="text-xs font-bold text-zinc-500 uppercase">Measurement ID</label>
                 <input 
                   type="text" 
                   value={gaId} 
