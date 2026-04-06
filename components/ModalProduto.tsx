@@ -6,7 +6,7 @@ import { useCart } from "./CartContext";
 import { supabase } from "../lib/supabase";
 import { X, Plus, Minus, ShoppingBag, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 
-export default function ModalProduto({ produto, tenantId, onClose }: { produto: any, tenantId: string, onClose: () => void }) {
+export default function ModalProduto({ produto, tenantId, isAberta, onClose }: { produto: any, tenantId: string, isAberta: boolean, onClose: () => void }) {
   const cart = useCart();
   const adicionarProduto = cart.adicionarAoCarrinho || cart.adicionarItem || cart.addItem || cart.add;
 
@@ -18,7 +18,6 @@ export default function ModalProduto({ produto, tenantId, onClose }: { produto: 
 
   const [selecoes, setSelecionados] = useState<Record<string, number>>({});
   
-  // ESTADO NOVO: Guarda o sabor/variação que o cliente escolheu
   const [variacaoSelecionada, setVariacaoSelecionada] = useState<string | null>(null);
 
   useEffect(() => {
@@ -34,7 +33,6 @@ export default function ModalProduto({ produto, tenantId, onClose }: { produto: 
     buscarGrupos();
   }, [produto.id]);
 
-  // MÁGICA DO PIXEL 2: ViewContent
   useEffect(() => {
     // @ts-ignore
     if (typeof window !== "undefined" && window.fbq) {
@@ -70,7 +68,6 @@ export default function ModalProduto({ produto, tenantId, onClose }: { produto: 
     }
   };
 
-  // VERIFICAÇÃO ATUALIZADA: Checa complementos E se a variação foi escolhida (se existir)
   const isComplementosOk = gruposComplementos.every(grupo => {
     if (!grupo.is_required) return true;
     const totalNoGrupo = grupo.complement_items.reduce((acc: number, curr: any) => acc + (selecoes[curr.id] || 0), 0);
@@ -80,31 +77,58 @@ export default function ModalProduto({ produto, tenantId, onClose }: { produto: 
   const temVariacoes = produto.variations && produto.variations.length > 0;
   const isVariacaoOk = temVariacoes ? variacaoSelecionada !== null : true;
   
-  const isPodeAdicionar = isComplementosOk && isVariacaoOk;
+  const isPodeAdicionar = isComplementosOk && isVariacaoOk && isAberta;
 
   let valorExtraUnitario = 0;
   const listaFormatadaParaCarrinho: any[] = [];
 
   gruposComplementos.forEach(grupo => {
+    let precosDesteGrupo: number[] = [];
+    let nomesDesteGrupo: string[] = [];
+
     grupo.complement_items.forEach((item: any) => {
       const qtd = selecoes[item.id];
       if (qtd && qtd > 0) {
-        valorExtraUnitario += (Number(item.price) * qtd);
-        listaFormatadaParaCarrinho.push({
-          id: item.id,
-          name: qtd > 1 ? `${qtd}x ${item.name}` : item.name,
-          price: Number(item.price) * qtd
-        });
+        for (let i = 0; i < qtd; i++) precosDesteGrupo.push(Number(item.price));
+        
+        let nomeNoCarrinho = qtd > 1 ? `${qtd}x ${item.name}` : item.name;
+        nomesDesteGrupo.push(nomeNoCarrinho);
       }
     });
+
+    if (precosDesteGrupo.length > 0) {
+      let valorDoGrupo = 0;
+
+      if (grupo.tipo_calculo === 'maior') {
+        valorDoGrupo = Math.max(...precosDesteGrupo);
+      } else if (grupo.tipo_calculo === 'media') {
+        const somaTudo = precosDesteGrupo.reduce((a, b) => a + b, 0);
+        valorDoGrupo = somaTudo / precosDesteGrupo.length;
+      } else {
+        valorDoGrupo = precosDesteGrupo.reduce((a, b) => a + b, 0);
+      }
+
+      valorExtraUnitario += valorDoGrupo;
+
+      let textoCart = nomesDesteGrupo.join(" e ");
+      if (grupo.tipo_calculo === 'maior' && precosDesteGrupo.length > 1) {
+        textoCart += " (Maior Valor)";
+      }
+
+      listaFormatadaParaCarrinho.push({
+        id: grupo.id,
+        name: textoCart,
+        price: valorDoGrupo
+      });
+    }
   });
 
   const valorFinalTela = (Number(produto.price) + valorExtraUnitario) * quantidadeGlobal;
 
   const handleAdicionarAoCarrinho = () => {
+    if (!isAberta) return alert("A loja está fechada no momento.");
     if (!isPodeAdicionar) return alert("Por favor, preencha as opções obrigatórias.");
     
-    // MÁGICA DO PIXEL 3: AddToCart
     // @ts-ignore
     if (typeof window !== "undefined" && window.fbq) {
       // @ts-ignore
@@ -118,7 +142,6 @@ export default function ModalProduto({ produto, tenantId, onClose }: { produto: 
     }
 
     if (adicionarProduto) {
-      // Passa a variacaoSelecionada como o último parâmetro para o CartContext
       adicionarProduto(produto, quantidadeGlobal, listaFormatadaParaCarrinho, observacao, variacaoSelecionada);
       onClose();
     }
@@ -141,9 +164,8 @@ export default function ModalProduto({ produto, tenantId, onClose }: { produto: 
         <div className="p-6 overflow-y-auto custom-scrollbar flex-1 bg-zinc-50/50">
           <h2 className="text-2xl font-black text-zinc-900 leading-tight">{produto.name}</h2>
           <p className="text-zinc-500 text-sm mt-2 leading-relaxed">{produto.description}</p>
-          <p className="text-xl font-black text-emerald-600 mt-4 border-b border-zinc-200 pb-6">R$ {Number(produto.price).toFixed(2).replace('.', ',')}</p>
+          <p className="text-xl font-black text-indigo-600 mt-4 border-b border-zinc-200 pb-6">R$ {Number(produto.price).toFixed(2).replace('.', ',')}</p>
 
-          {/* === BLOCO NOVO: EXIBIÇÃO DE VARIAÇÕES === */}
           {temVariacoes && (
             <div className="mt-6 bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-sm">
                <div className="bg-zinc-100/50 p-4 flex justify-between items-start border-b border-zinc-200">
@@ -152,7 +174,7 @@ export default function ModalProduto({ produto, tenantId, onClose }: { produto: 
                     <p className="text-xs font-bold text-zinc-500 mt-1">Escolha 1 opção obrigatória</p>
                   </div>
                   <div className="shrink-0 flex flex-col items-end gap-1">
-                    <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-md ${variacaoSelecionada ? "bg-emerald-100 text-emerald-700" : "bg-zinc-800 text-white"}`}>
+                    <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-md ${variacaoSelecionada ? "bg-indigo-100 text-indigo-700" : "bg-zinc-800 text-white"}`}>
                       {variacaoSelecionada ? "Concluído" : "Obrigatório"}
                     </span>
                   </div>
@@ -162,7 +184,7 @@ export default function ModalProduto({ produto, tenantId, onClose }: { produto: 
                     <button 
                       key={idx}
                       onClick={() => setVariacaoSelecionada(varItem)}
-                      className={`py-3 px-2 rounded-xl text-sm font-bold border-2 transition-all flex items-center justify-center text-center ${variacaoSelecionada === varItem ? "border-red-600 bg-red-50 text-red-700 shadow-sm" : "border-zinc-200 bg-white text-zinc-600 hover:border-red-300"}`}
+                      className={`py-3 px-2 rounded-xl text-sm font-bold border-2 transition-all flex items-center justify-center text-center ${variacaoSelecionada === varItem ? "border-indigo-600 bg-indigo-50 text-indigo-700 shadow-sm" : "border-zinc-200 bg-white text-zinc-600 hover:border-indigo-300"}`}
                     >
                       {varItem}
                     </button>
@@ -170,7 +192,6 @@ export default function ModalProduto({ produto, tenantId, onClose }: { produto: 
                </div>
             </div>
           )}
-          {/* === FIM BLOCO VARIAÇÕES === */}
 
           {loadingGrupos ? (
             <div className="flex justify-center py-10"><Loader2 size={24} className="animate-spin text-zinc-400"/></div>
@@ -187,11 +208,12 @@ export default function ModalProduto({ produto, tenantId, onClose }: { produto: 
                         <h3 className="font-black text-zinc-900 uppercase tracking-tight">{grupo.name}</h3>
                         <p className="text-xs font-bold text-zinc-500 mt-1">
                           {grupo.max_items > 1 ? `Selecione até ${grupo.max_items} opções` : "Escolha 1 opção"}
+                          {grupo.tipo_calculo === 'maior' && " • Cobrado pelo mais caro"}
                         </p>
                       </div>
                       <div className="shrink-0 flex flex-col items-end gap-1">
                         {grupo.is_required && (
-                          <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-md ${totalNoGrupo >= grupo.min_items ? "bg-emerald-100 text-emerald-700" : "bg-zinc-800 text-white"}`}>
+                          <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-md ${totalNoGrupo >= grupo.min_items ? "bg-indigo-100 text-indigo-700" : "bg-zinc-800 text-white"}`}>
                             {totalNoGrupo >= grupo.min_items ? "Concluído" : "Obrigatório"}
                           </span>
                         )}
@@ -208,7 +230,7 @@ export default function ModalProduto({ produto, tenantId, onClose }: { produto: 
                           <div key={item.id} className="p-4 flex items-center justify-between hover:bg-zinc-50/80 transition-colors">
                             <div className="flex-1 pr-4">
                               <h4 className="font-bold text-zinc-800 text-sm">{item.name}</h4>
-                              {item.price > 0 && <p className="text-xs font-black text-emerald-600 mt-0.5">+ R$ {Number(item.price).toFixed(2).replace(".", ",")}</p>}
+                              {item.price > 0 && <p className="text-xs font-black text-indigo-600 mt-0.5">+ R$ {Number(item.price).toFixed(2).replace(".", ",")}</p>}
                             </div>
 
                             <div className="flex items-center gap-3 shrink-0">
@@ -216,11 +238,11 @@ export default function ModalProduto({ produto, tenantId, onClose }: { produto: 
                                 <>
                                   {qtdItem > 0 ? (
                                     <>
-                                      <button onClick={() => alterarSelecao(grupo, item, 'remove')} className="w-8 h-8 rounded-full border-2 border-zinc-200 flex items-center justify-center text-zinc-600 hover:border-red-600 hover:text-red-600 transition-colors"><Minus size={16} strokeWidth={3}/></button>
+                                      <button onClick={() => alterarSelecao(grupo, item, 'remove')} className="w-8 h-8 rounded-full border-2 border-zinc-200 flex items-center justify-center text-zinc-600 hover:border-indigo-600 hover:text-indigo-600 transition-colors"><Minus size={16} strokeWidth={3}/></button>
                                       <span className="font-black text-zinc-900 w-4 text-center">{qtdItem}</span>
                                     </>
                                   ) : <div className="w-[60px]"></div>}
-                                  <button onClick={() => alterarSelecao(grupo, item, 'add')} disabled={limitReached && qtdItem === 0} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors ${limitReached && qtdItem === 0 ? "border-zinc-100 text-zinc-300" : "border-red-600 text-red-600 hover:bg-red-50"}`}><Plus size={16} strokeWidth={3}/></button>
+                                  <button onClick={() => alterarSelecao(grupo, item, 'add')} disabled={limitReached && qtdItem === 0} className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors ${limitReached && qtdItem === 0 ? "border-zinc-100 text-zinc-300" : "border-indigo-600 text-indigo-600 hover:bg-indigo-50"}`}><Plus size={16} strokeWidth={3}/></button>
                                 </>
                               ) : (
                                 <button 
@@ -230,7 +252,7 @@ export default function ModalProduto({ produto, tenantId, onClose }: { produto: 
                                     novasSelecoes[item.id] = 1;
                                     setSelecionados(novasSelecoes);
                                   }}
-                                  className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${qtdItem > 0 ? "border-red-600 bg-red-600 text-white" : "border-zinc-300"}`}
+                                  className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${qtdItem > 0 ? "border-indigo-600 bg-indigo-600 text-white" : "border-zinc-300"}`}
                                 >
                                   {qtdItem > 0 && <CheckCircle2 size={16} strokeWidth={3} />}
                                 </button>
@@ -248,7 +270,7 @@ export default function ModalProduto({ produto, tenantId, onClose }: { produto: 
 
           <div className="mt-8 pt-6 border-t border-zinc-200">
             <h3 className="font-bold text-zinc-900 mb-2 flex items-center gap-2"><AlertCircle size={16}/> Alguma observação?</h3>
-            <textarea rows={2} value={observacao} onChange={e => setObservacao(e.target.value)} placeholder="Ex: Tirar cebola, carne bem passada..." className="w-full border border-zinc-300 bg-white rounded-xl p-3 text-sm focus:ring-2 focus:ring-red-600 outline-none resize-none shadow-inner" />
+            <textarea rows={2} value={observacao} onChange={e => setObservacao(e.target.value)} placeholder="Ex: Tirar cebola, carne bem passada..." className="w-full border border-zinc-300 bg-white rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-600 outline-none resize-none shadow-inner" />
           </div>
         </div>
 
@@ -256,11 +278,15 @@ export default function ModalProduto({ produto, tenantId, onClose }: { produto: 
           <div className="flex items-center bg-zinc-100 rounded-xl">
             <button onClick={() => setQuantidadeGlobal(Math.max(1, quantidadeGlobal - 1))} className="p-3.5 text-zinc-500 hover:text-zinc-900 active:scale-95 transition-transform"><Minus size={18} strokeWidth={3} /></button>
             <span className="w-8 text-center font-black text-zinc-900">{quantidadeGlobal}</span>
-            <button onClick={() => setQuantidadeGlobal(quantidadeGlobal + 1)} className="p-3.5 text-red-600 hover:text-red-800 active:scale-95 transition-transform"><Plus size={18} strokeWidth={3} /></button>
+            <button onClick={() => setQuantidadeGlobal(quantidadeGlobal + 1)} className="p-3.5 text-indigo-600 hover:text-indigo-800 active:scale-95 transition-transform"><Plus size={18} strokeWidth={3} /></button>
           </div>
-          <button onClick={handleAdicionarAoCarrinho} disabled={!isPodeAdicionar} className={`flex-1 font-black py-4 px-5 rounded-xl shadow-md transition-all flex justify-between items-center active:scale-95 ${!isPodeAdicionar ? "bg-zinc-300 text-zinc-500 cursor-not-allowed" : "bg-red-600 hover:bg-red-700 text-white"}`}>
-            <span>Adicionar</span>
-            <span>R$ {valorFinalTela.toFixed(2).replace('.', ',')}</span>
+          <button 
+            onClick={handleAdicionarAoCarrinho} 
+            disabled={!isPodeAdicionar} 
+            className={`flex-1 font-black py-4 px-5 rounded-xl shadow-md transition-all flex justify-between items-center active:scale-95 ${!isAberta ? "bg-zinc-300 text-zinc-500 cursor-not-allowed" : !isPodeAdicionar ? "bg-zinc-300 text-zinc-500 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700 text-white"}`}
+          >
+            <span>{!isAberta ? "Loja Fechada" : "Adicionar"}</span>
+            {isAberta && <span>R$ {valorFinalTela.toFixed(2).replace('.', ',')}</span>}
           </button>
         </div>
       </div>

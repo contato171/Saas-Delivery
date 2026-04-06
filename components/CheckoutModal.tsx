@@ -16,7 +16,13 @@ function calcularDistanciaKm(lat1: number, lon1: number, lat2: number, lon2: num
 }
 
 export default function CheckoutModal({ onClose }: { onClose: () => void }) {
-  const { itens, subtotal, totalCarrinho, cupomAtivo, valorDesconto, adicionarItem } = useCart();
+  const { itens, subtotal, totalCarrinho, cupomAtivo, valorDesconto, adicionarItem, dispararEventoRadar, enderecoDetectado } = useCart();
+  // ESPIÃO AÇÃO 3: "Chegou no Checkout"
+  useEffect(() => {
+    if (dispararEventoRadar) {
+      dispararEventoRadar('checkout', 'Iniciou o Checkout');
+    }
+  }, []);
   
   // DADOS DO CLIENTE
   const [nomeCliente, setNomeCliente] = useState("");
@@ -48,6 +54,18 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
   const [distanciaReal, setDistanciaReal] = useState<number | null>(null);
   const [erroMapa, setErroMapa] = useState("");
   const [sugestoesInteligentes, setSugestoesInteligentes] = useState<any[]>([]);
+  
+  // AUTO-PREENCHIMENTO COM GPS DO CART CONTEXT
+  useEffect(() => {
+    // Se o Contexto detectou o endereço via GPS e o cliente está no modo de endereço novo:
+    if (enderecoDetectado && modoEndereco === "novo" && !novaRua) {
+      if (enderecoDetectado.cep) setNewCep(enderecoDetectado.cep);
+      if (enderecoDetectado.rua) setNewRua(enderecoDetectado.rua);
+      if (enderecoDetectado.bairro) setNewBairro(enderecoDetectado.bairro);
+      if (enderecoDetectado.cidade) setNewCidade(enderecoDetectado.cidade);
+      if (enderecoDetectado.uf) setNewUf(enderecoDetectado.uf);
+    }
+  }, [enderecoDetectado, modoEndereco]);
 
   const salvarNoCRM = async (nome: string, telefone: string, endereco: string) => {
     try {
@@ -102,7 +120,7 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
           if (dist <= (lojaConfig.delivery_radius_km || 10)) { setLocalValido(true); } 
           else { setLocalValido(false); setErroMapa(`O endereço está a ${dist.toFixed(1)}km. O limite da loja é ${lojaConfig.delivery_radius_km}km.`); }
         } else { setLocalValido(false); setErroMapa("Endereço não achado pelo GPS."); }
-      } catch (e) { setLocalValido(false); setErroMapa("Falha de satélite."); }
+      } catch (e) { setLocalValido(false); setErroMapa("Não foi possível verificar o endereço."); }
     } else { setLocalValido(true); }
     setVerificandoLocal(false);
   };
@@ -226,6 +244,10 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
           num_items: itens.length
         });
       }
+      // ESPIÃO AÇÃO 4: "Venda Concluída!" 🤑
+      if (dispararEventoRadar) {
+        dispararEventoRadar('purchase', 'Venda realizada pelo WhatsApp!', totalGeral);
+      }
 
       // ATUALIZADO: Inclui a variação na mensagem do WhatsApp
       let textoPedido = `*NOVO PEDIDO!* 🚀\n*ID:* #${pedidoSalvo.id.split('-')[0].toUpperCase()}\n\n*Cliente:* ${nomeCliente}\n*Contato:* ${telefoneCliente}\n*Tipo:* ${tipoEntrega === 'entrega' ? '🛵 Entrega' : '🏃‍♂️ Retirada'}\n`;
@@ -328,7 +350,19 @@ export default function CheckoutModal({ onClose }: { onClose: () => void }) {
                         </div>
                         <button type="button" onClick={confirmarNovoEndereco} className="w-full bg-zinc-900 text-white font-bold py-3 rounded-lg text-sm hover:bg-zinc-800 transition-colors flex items-center justify-center gap-2"><MapPin size={16} /> Validar Disponibilidade</button>
                         
-                        {verificandoLocal && modoEndereco === "novo" ? <p className="text-sm text-yellow-600 font-bold flex items-center justify-center gap-2 mt-2"><Loader2 size={16} className="animate-spin"/> Conectando ao Satélite...</p> : erroMapa && modoEndereco === "novo" ? <p className="text-sm text-red-600 font-bold flex items-center justify-center gap-1 mt-2 text-center leading-tight"><AlertCircle size={16} className="shrink-0"/> {erroMapa}</p> : localValido && modoEndereco === "novo" ? (<div><p className="text-sm text-emerald-600 font-bold flex items-center justify-center gap-1 mt-2"><CheckCircle2 size={16}/> Endereço Seguro e Aprovado!</p></div>) : null}
+                        {verificandoLocal && modoEndereco === "novo" ? (
+                          <p className="text-sm text-zinc-500 font-bold flex items-center justify-center gap-2 mt-2">
+                            <Loader2 size={16} className="animate-spin"/> Verificando área de entrega...
+                          </p>
+                        ) : erroMapa && modoEndereco === "novo" ? (
+                          <p className="text-sm text-red-600 font-bold flex items-center justify-center gap-1 mt-2 text-center leading-tight">
+                            <AlertCircle size={16} className="shrink-0"/> {erroMapa}
+                          </p>
+                        ) : localValido && modoEndereco === "novo" ? (
+                          <p className="text-sm text-emerald-600 font-bold flex items-center justify-center gap-1 mt-2">
+                            <CheckCircle2 size={16}/> Endereço aprovado!
+                          </p>
+                        ) : null}
                       </div>
                     )}
                   </div>

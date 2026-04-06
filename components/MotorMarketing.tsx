@@ -62,7 +62,6 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
     carregarDados();
   }, [tenantId]);
 
-  // VERIFICAÇÃO CRÍTICA DA ARQUITETURA
   const isIntegracaoCompleta = tenant?.meta_page_id && tenant?.meta_ad_account_id && tenant?.meta_pixel_id && accessToken;
 
   const handleAdicionarSaldoMeta = () => {
@@ -83,7 +82,7 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
         setProdutosSelecionados(produtosSelecionados.filter(p => p.id !== prod.id));
       } else {
         if (produtosSelecionados.length < 30) setProdutosSelecionados([...produtosSelecionados, prod]);
-        else alert("Máximo de 30 produtos.");
+        else alert("Maximum of 30 products allowed.");
       }
     }
   };
@@ -108,7 +107,7 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
       const res = await fetch('/api/ai/gerar-anuncio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ produtos: produtosSelecionados, tenantName: tenant?.name || "Restaurante", tipoAnuncio })
+        body: JSON.stringify({ produtos: produtosSelecionados, tenantName: tenant?.name || "Restaurant", tipoAnuncio })
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -116,7 +115,7 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
       setAnuncioGerado({ hook: data.hook, body: data.body, cta: data.cta });
       setEtapa(3); 
     } catch (error) {
-      setAnuncioGerado({ hook: "Hungry? 🤤", body: "We have the best food in town! Order now.", cta: "👉 Click and order!" }); // Tradução embutida para o vídeo
+      setAnuncioGerado({ hook: "Hungry? 🤤", body: "We have the best food in town! Order now.", cta: "👉 Click and order!" });
       setEtapa(3);
     }
   };
@@ -138,8 +137,8 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
   };
 
   const publicarNaMeta = async () => {
-    if (orcamentoTotal / diasVeiculacao < 10) return alert("A verba diária mínima é R$ 10,00.");
-    if (!cidadeSelecionadaMeta) return alert("Selecione uma cidade.");
+    if (orcamentoTotal / diasVeiculacao < 10) return alert("The minimum daily budget is R$ 10.00.");
+    if (!cidadeSelecionadaMeta) return alert("Please select a target city.");
 
     setPublicando(true);
     try {
@@ -148,7 +147,7 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
         const ext = midiaUpload.name.split('.').pop();
         const fileName = `ads/${tenantId}_${Date.now()}.${ext}`;
         const { error } = await supabase.storage.from('cardapio').upload(fileName, midiaUpload);
-        if (error) throw new Error("Erro no upload da mídia.");
+        if (error) throw new Error("Error uploading media.");
         const { data } = supabase.storage.from('cardapio').getPublicUrl(fileName);
         uploadedUrl = data.publicUrl;
       }
@@ -170,30 +169,29 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
 
       setPublicadoSucesso(true);
     } catch (error: any) {
-      alert(`Erro: ${error.message}`);
+      alert(`Error: ${error.message}`);
     } finally {
       setPublicando(false);
     }
   };
 
   const produtosAgrupados = produtos.filter(p => p.name.toLowerCase().includes(buscaProduto.toLowerCase()) || (p.description && p.description.toLowerCase().includes(buscaProduto.toLowerCase())))
-    .reduce((acc, prod) => { const catName = prod.categories?.name || "Geral"; if (!acc[catName]) acc[catName] = []; acc[catName].push(prod); return acc; }, {} as Record<string, any[]>);
+    .reduce((acc, prod) => { const catName = prod.categories?.name || "General"; if (!acc[catName]) acc[catName] = []; acc[catName].push(prod); return acc; }, {} as Record<string, any[]>);
 
   const podeConfigurarCampanha = tipoAnuncio === "single" ? produtosSelecionados.length === 1 : produtosSelecionados.length >= 2;
 
   if (loading) return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-indigo-600" size={40} /></div>;
 
-  // ESTADO VAZIO: LOJISTA AINDA NÃO CONFIGUROU AS INTEGRAÇÕES
   if (!isIntegracaoCompleta) {
     return (
       <div className="space-y-6 text-zinc-900 font-sans pb-20 animate-in fade-in">
-        <div><h1 className="text-3xl font-black flex items-center gap-3"><span className="bg-indigo-600 text-white p-2 rounded-xl"><Wand2 size={24}/></span>Marketing IA</h1></div>
+        <div><h1 className="text-3xl font-black flex items-center gap-3"><span className="bg-indigo-600 text-white p-2 rounded-xl"><Wand2 size={24}/></span>AI Marketing</h1></div>
         <div className="bg-white max-w-2xl mx-auto rounded-2xl border border-zinc-200 shadow-sm p-10 text-center mt-10">
           <Plug size={48} className="mx-auto text-zinc-300 mb-6" />
-          <h2 className="text-2xl font-black mb-3">Setup Incompleto</h2>
-          <p className="text-zinc-500 mb-8">Para usar a Inteligência Artificial, você precisa primeiro conectar seu Facebook e configurar sua Página e Conta de Anúncios.</p>
+          <h2 className="text-2xl font-black mb-3">Incomplete Setup</h2>
+          <p className="text-zinc-500 mb-8">To use Artificial Intelligence, you must first connect your Facebook and configure your Page and Ad Account.</p>
           <p className="text-sm font-bold text-indigo-600 bg-indigo-50 p-4 rounded-xl border border-indigo-100">
-            Acesse o menu "Integrações" na barra lateral para concluir a configuração.
+            Go to the "Integrations" menu in the sidebar to complete the setup.
           </p>
         </div>
       </div>
@@ -204,7 +202,7 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
     <div className="space-y-6 text-zinc-900 font-sans pb-20 animate-in fade-in">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
-          <h1 className="text-3xl font-black tracking-tight flex items-center gap-3"><span className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-2 rounded-xl"><Wand2 size={24}/></span>Marketing IA</h1>
+          <h1 className="text-3xl font-black tracking-tight flex items-center gap-3"><span className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-2 rounded-xl"><Wand2 size={24}/></span>AI Marketing</h1>
           <p className="text-zinc-500 mt-1">AI Ads Engine - Auto generate and publish campaigns.</p>
         </div>
         <div className="bg-white border border-zinc-200 shadow-sm rounded-2xl p-4 flex items-center gap-6">
@@ -217,7 +215,7 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
         <div className="bg-white rounded-2xl border border-zinc-200 p-10 text-center shadow-sm mt-10">
           <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 size={40} /></div>
           <h2 className="text-2xl font-black text-zinc-900 mb-2">Campaign Published! 🚀</h2>
-          <button onClick={() => { setEtapa(1); setPublicadoSucesso(false); setProdutosSelecionados([]); setCidadeSelecionadaMeta(null); setMidiaUpload(null); setMidiaPreview(null); }} className="bg-zinc-900 text-white font-bold py-3 px-8 rounded-xl mt-6">New Campaign</button>
+          <button onClick={() => { setEtapa(1); setPublicadoSucesso(false); setProdutosSelecionados([]); setCidadeSelecionadaMeta(null); setMidiaUpload(null); setMidiaPreview(null); }} className="bg-zinc-900 text-white font-bold py-3 px-8 rounded-xl mt-6">Create New Campaign</button>
         </div>
       ) : (
         <>
@@ -268,13 +266,13 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
                 })}
               </div>
               <div className="p-6 border-t border-zinc-100 bg-zinc-50/50 flex justify-between items-center sticky bottom-0">
-                <span className="font-bold">{produtosSelecionados.length} selected</span>
-                <button onClick={gerarAnuncioIA} disabled={!podeConfigurarCampanha} className="bg-indigo-600 text-white font-bold py-3 px-6 rounded-xl disabled:opacity-50">Continue</button>
+                <span className="font-bold text-zinc-700">{produtosSelecionados.length} selected</span>
+                <button onClick={gerarAnuncioIA} disabled={!podeConfigurarCampanha} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl disabled:opacity-50 transition-colors">Continue to Setup</button>
               </div>
             </div>
           )}
 
-          {etapa === 2 && <div className="bg-white rounded-2xl p-12 text-center min-h-[400px] flex flex-col justify-center"><Loader2 className="animate-spin text-indigo-600 mx-auto mb-4" size={40}/><h2 className="text-xl font-bold">AI is building your campaign...</h2></div>}
+          {etapa === 2 && <div className="bg-white rounded-2xl p-12 text-center min-h-[400px] flex flex-col justify-center"><Loader2 className="animate-spin text-indigo-600 mx-auto mb-4" size={40}/><h2 className="text-xl font-bold text-zinc-800">AI is building your campaign...</h2></div>}
 
           {etapa === 3 && anuncioGerado && (
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 animate-in slide-in-from-bottom-8">
@@ -289,11 +287,11 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
                    </div>
                    <div className="p-5 grid grid-cols-2 gap-4">
                      <div className="bg-zinc-50 border border-zinc-200 p-3 rounded-lg">
-                       <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">Target Page (pages_manage_ads)</p>
+                       <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Target Page (pages_manage_ads)</p>
                        <p className="font-bold text-zinc-800 text-sm truncate">{tenant?.name} Page ID: {tenant?.meta_page_id}</p>
                      </div>
                      <div className="bg-zinc-50 border border-zinc-200 p-3 rounded-lg">
-                       <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">Ad Account (ads_management)</p>
+                       <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider mb-1">Ad Account (ads_management)</p>
                        <p className="font-bold text-zinc-800 text-sm truncate">ID: {tenant?.meta_ad_account_id}</p>
                      </div>
                    </div>
@@ -305,53 +303,53 @@ export default function MotorMarketing({ tenantId }: { tenantId: string }) {
                     <div className="space-y-3">
                       <label className="text-xs font-bold text-zinc-500 uppercase"><MapPin size={14} className="inline mr-1"/> Delivery Area (City)</label>
                       {!cidadeSelecionadaMeta ? (
-                        <div className="flex gap-2"><input type="text" value={buscaCidade} onChange={e => setBuscaCidade(e.target.value)} placeholder="Search city..." className="flex-1 border p-3 rounded-lg focus:ring-2 focus:ring-indigo-600 outline-none" /><button onClick={buscarCidadeMeta} className="bg-zinc-900 text-white px-4 rounded-lg font-bold"><Search size={20} /></button></div>
+                        <div className="flex gap-2"><input type="text" value={buscaCidade} onChange={e => setBuscaCidade(e.target.value)} placeholder="Search city..." className="flex-1 border border-zinc-300 p-3 rounded-lg focus:ring-2 focus:ring-indigo-600 outline-none" /><button onClick={buscarCidadeMeta} className="bg-zinc-900 hover:bg-zinc-800 transition-colors text-white px-4 rounded-lg font-bold"><Search size={20} /></button></div>
                       ) : (
-                        <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex justify-between"><div><p className="font-bold text-emerald-800">{cidadeSelecionadaMeta.name}</p><p className="text-xs text-emerald-600">{cidadeSelecionadaMeta.region}</p></div><button onClick={() => setCidadeSelecionadaMeta(null)} className="text-emerald-700 font-bold text-xs bg-emerald-100 px-3 py-1.5 rounded-lg">Change</button></div>
+                        <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl flex justify-between"><div><p className="font-bold text-emerald-800">{cidadeSelecionadaMeta.name}</p><p className="text-xs text-emerald-600">{cidadeSelecionadaMeta.region}</p></div><button onClick={() => setCidadeSelecionadaMeta(null)} className="text-emerald-700 hover:bg-emerald-200 transition-colors font-bold text-xs bg-emerald-100 px-3 py-1.5 rounded-lg">Change</button></div>
                       )}
-                      {resultadosBuscaCidade.length > 0 && <div className="border rounded-xl mt-2 max-h-40 overflow-y-auto">{resultadosBuscaCidade.map(loc => <button key={loc.key} onClick={() => {setCidadeSelecionadaMeta(loc); setBuscaCidade(""); setResultadosBuscaCidade([]);}} className="w-full text-left p-3 hover:bg-zinc-50 border-b">{loc.name}, {loc.region}</button>)}</div>}
+                      {resultadosBuscaCidade.length > 0 && <div className="border border-zinc-200 rounded-xl mt-2 max-h-40 overflow-y-auto">{resultadosBuscaCidade.map(loc => <button key={loc.key} onClick={() => {setCidadeSelecionadaMeta(loc); setBuscaCidade(""); setResultadosBuscaCidade([]);}} className="w-full text-left p-3 hover:bg-zinc-50 border-b border-zinc-100 font-medium text-zinc-700 text-sm">{loc.name}, {loc.region}</button>)}</div>}
                     </div>
 
                     <div className="flex gap-6">
-                      <div className="flex-1"><label className="text-xs font-bold text-zinc-500 uppercase"><DollarSign size={14} className="inline"/> Total Budget (BRL)</label><input type="number" value={orcamentoTotal} onChange={e => setOrcamentoTotal(Number(e.target.value))} className="w-full border p-3 text-xl font-black text-indigo-600 rounded-lg" /></div>
-                      <div className="flex-1"><label className="text-xs font-bold text-zinc-500 uppercase">Duration (Days)</label><input type="number" value={diasVeiculacao} onChange={e => setDiasVeiculacao(Number(e.target.value))} className="w-full border p-3 text-xl font-black rounded-lg" /></div>
+                      <div className="flex-1"><label className="text-xs font-bold text-zinc-500 uppercase"><DollarSign size={14} className="inline"/> Total Budget (BRL)</label><input type="number" value={orcamentoTotal} onChange={e => setOrcamentoTotal(Number(e.target.value))} className="w-full border border-zinc-300 p-3 text-xl font-black text-indigo-600 rounded-lg outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600" /></div>
+                      <div className="flex-1"><label className="text-xs font-bold text-zinc-500 uppercase">Duration (Days)</label><input type="number" value={diasVeiculacao} onChange={e => setDiasVeiculacao(Number(e.target.value))} className="w-full border border-zinc-300 p-3 text-xl font-black text-zinc-800 rounded-lg outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600" /></div>
                     </div>
                   </div>
                 </div>
 
                 <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
-                  <div className="p-5 border-b border-zinc-100 bg-zinc-50"><h2 className="font-bold text-zinc-900 flex items-center gap-2"><Megaphone size={20}/> Ad Copy</h2></div>
+                  <div className="p-5 border-b border-zinc-100 bg-zinc-50"><h2 className="font-black text-zinc-900 flex items-center gap-2"><Megaphone size={20}/> Ad Copy</h2></div>
                   <div className="p-5 space-y-4">
-                    <div><label className="text-xs font-bold text-zinc-400">Headline</label><input type="text" value={anuncioGerado.hook} onChange={e => handleCopyChange("hook", e.target.value)} className="w-full border p-3 rounded-lg" /></div>
-                    <div><label className="text-xs font-bold text-zinc-400">Primary Text</label><textarea rows={4} value={anuncioGerado.body} onChange={e => handleCopyChange("body", e.target.value)} className="w-full border p-3 rounded-lg resize-none" /></div>
+                    <div><label className="text-xs font-bold text-zinc-500 uppercase">Headline</label><input type="text" value={anuncioGerado.hook} onChange={e => handleCopyChange("hook", e.target.value)} className="w-full border border-zinc-300 p-3 rounded-lg outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 text-sm font-medium text-zinc-800" /></div>
+                    <div><label className="text-xs font-bold text-zinc-500 uppercase">Primary Text</label><textarea rows={4} value={anuncioGerado.body} onChange={e => handleCopyChange("body", e.target.value)} className="w-full border border-zinc-300 p-3 rounded-lg resize-none outline-none focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600 text-sm text-zinc-700" /></div>
                   </div>
                 </div>
 
               </div>
 
               <div className="lg:col-span-2">
-                <div className="bg-zinc-100 rounded-2xl border border-zinc-200 p-6 sticky top-24">
-                  <h3 className="font-bold text-zinc-700 text-sm mb-4">Ad Preview</h3>
+                <div className="bg-zinc-50 rounded-2xl border border-zinc-200 p-6 sticky top-24 shadow-sm">
+                  <h3 className="font-bold text-zinc-800 text-sm mb-4 uppercase tracking-wider">Ad Preview</h3>
                   
                   {tipoAnuncio === "carousel" ? (
-                    <div className="flex gap-4 overflow-x-auto pb-4 snap-x">
+                    <div className="flex gap-4 overflow-x-auto pb-4 snap-x custom-scrollbar">
                       {produtosSelecionados.map((prod, index) => (
-                        <div key={prod.id} className="bg-white min-w-[240px] rounded-xl shadow-md overflow-hidden shrink-0"><div className="w-full aspect-square relative"><img src={prod.image_url} className="w-full h-full object-cover" /></div><div className="p-3"><p className="text-xs font-bold truncate">{prod.name}</p><button className="bg-zinc-100 w-full mt-2 py-1.5 rounded text-xs font-bold">Shop Now</button></div></div>
+                        <div key={prod.id} className="bg-white min-w-[240px] rounded-xl shadow-md overflow-hidden shrink-0 border border-zinc-100"><div className="w-full aspect-square relative"><img src={prod.image_url} className="w-full h-full object-cover" /></div><div className="p-3"><p className="text-sm font-bold text-zinc-800 truncate">{prod.name}</p><button className="bg-zinc-100 text-zinc-700 w-full mt-3 py-2 rounded-lg text-xs font-bold transition-colors hover:bg-zinc-200">Shop Now</button></div></div>
                       ))}
                     </div>
                   ) : (
-                    <div className="bg-white max-w-[320px] mx-auto rounded-xl shadow-md overflow-hidden flex flex-col">
-                      <div className="p-3 border-b flex items-center gap-3"><div className="w-8 h-8 bg-zinc-200 rounded-full shrink-0 flex items-center justify-center text-xs font-bold">{tenant?.name?.charAt(0)}</div><p className="text-sm font-bold flex-1 truncate">{tenant?.name}</p><span className="text-zinc-500 text-xs">Sponsored</span></div>
-                      <div className="p-3 text-sm whitespace-pre-line">{anuncioGerado?.hook}{"\n\n"}{anuncioGerado?.body}</div>
-                      <div className="w-full aspect-square bg-zinc-950 relative">{midiaType === 'video' && midiaPreview ? <video src={midiaPreview} autoPlay muted loop className="w-full h-full object-contain" /> : <img src={midiaPreview || produtosSelecionados[0]?.image_url} className="w-full h-full object-cover" />}</div>
-                      <div className="p-3 flex justify-between items-center border-t"><p className="font-bold text-sm truncate">{produtosSelecionados[0]?.name}</p><button className="bg-zinc-200 text-xs px-3 py-1.5 font-bold rounded">Order Now</button></div>
+                    <div className="bg-white max-w-[320px] mx-auto rounded-xl shadow-md overflow-hidden flex flex-col border border-zinc-100">
+                      <div className="p-3 border-b border-zinc-100 flex items-center gap-3"><div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full shrink-0 flex items-center justify-center text-white text-xs font-black shadow-inner">{tenant?.name?.charAt(0)}</div><div><p className="text-sm font-bold text-zinc-900 leading-none truncate">{tenant?.name}</p><span className="text-zinc-500 text-[10px] font-medium">Sponsored</span></div></div>
+                      <div className="p-3 text-sm text-zinc-800 whitespace-pre-line leading-relaxed">{anuncioGerado?.hook}{"\n\n"}{anuncioGerado?.body}</div>
+                      <div className="w-full aspect-square bg-zinc-950 relative">{midiaType === 'video' && midiaPreview ? <video src={midiaPreview} autoPlay muted loop className="w-full h-full object-cover" /> : <img src={midiaPreview || produtosSelecionados[0]?.image_url} className="w-full h-full object-cover" />}</div>
+                      <div className="p-3 flex justify-between items-center bg-zinc-50 border-t border-zinc-100"><p className="font-bold text-sm text-zinc-900 truncate pr-2">{produtosSelecionados[0]?.name}</p><button className="bg-zinc-200 text-zinc-800 text-xs px-4 py-2 font-bold rounded-lg hover:bg-zinc-300 transition-colors">Order Now</button></div>
                     </div>
                   )}
 
-                  <button onClick={publicarNaMeta} disabled={publicando || !cidadeSelecionadaMeta} className="w-full bg-indigo-600 text-white font-black py-4 rounded-xl mt-6 disabled:opacity-50">
+                  <button onClick={publicarNaMeta} disabled={publicando || !cidadeSelecionadaMeta} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 rounded-xl mt-6 shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
                     {publicando ? "Publishing to Meta..." : "🚀 Publish Campaign"}
                   </button>
-                  <p className="text-[10px] text-center text-zinc-400 mt-3">By publishing, you agree to Meta's Advertising Policies.</p>
+                  <p className="text-[10px] text-center text-zinc-500 mt-4 leading-tight">By publishing, you agree to Meta's Advertising Policies and Terms of Service.</p>
                 </div>
               </div>
             </div>

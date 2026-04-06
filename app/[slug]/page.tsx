@@ -11,6 +11,37 @@ import CheckoutModal from "../../components/CheckoutModal";
 import { CartProvider } from "../../components/CartContext";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
+// Função utilitária para verificar se a loja está aberta AGORA
+function verificarLojaAberta(horarios: any) {
+  if (!horarios) return true; // Se não tem horário configurado, assume aberto
+  
+  const agora = new Date();
+  const diasStr = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"];
+  const diaAtual = diasStr[agora.getDay()];
+  const configHoje = horarios[diaAtual];
+
+  if (!configHoje || !configHoje.ativo) return false;
+
+  const horaAtual = agora.getHours();
+  const minAtual = agora.getMinutes();
+  const timeAtual = horaAtual * 60 + minAtual;
+
+  const [hAbre, mAbre] = configHoje.abertura.split(':').map(Number);
+  const timeAbre = hAbre * 60 + mAbre;
+
+  const [hFecha, mFech] = configHoje.fechamento.split(':').map(Number);
+  const timeFecha = hFecha * 60 + mFech;
+
+  // Lógica para horário que vira a noite (ex: abre 18:00, fecha 02:00)
+  if (timeFecha < timeAbre) {
+    if (timeAtual >= timeAbre || timeAtual <= timeFecha) return true;
+    return false;
+  }
+
+  // Lógica normal (ex: abre 10:00, fecha 22:00)
+  return timeAtual >= timeAbre && timeAtual <= timeFecha;
+}
+
 export default function VitrineLoja() {
   const params = useParams();
   const slug = params?.slug as string;
@@ -23,6 +54,8 @@ export default function VitrineLoja() {
   const [produtoSelecionado, setProdutoSelecionado] = useState<any>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  
+  const [isAberta, setIsAberta] = useState(true);
 
   const carouselRef = useRef<HTMLDivElement>(null);
 
@@ -32,32 +65,39 @@ export default function VitrineLoja() {
     }
   }, [slug]);
 
-  // ==========================================
-  // BUSCA COM CACHE GLOBAL E LOCAL
-  // ==========================================
+  // Atualiza o status da loja a cada minuto para não precisar dar F5
+  useEffect(() => {
+    if (!tenant?.business_hours) return;
+    
+    setIsAberta(verificarLojaAberta(tenant.business_hours));
+    const timer = setInterval(() => {
+      setIsAberta(verificarLojaAberta(tenant.business_hours));
+    }, 60000);
+    
+    return () => clearInterval(timer);
+  }, [tenant]);
+
   const carregarLojaOtimizada = async () => {
     setLoading(true);
 
     try {
-      // 1. CHAVE DO CACHE PARA A SESSÃO ATUAL
       const SESSION_CACHE_KEY = `@nexus_menu_${slug}`;
-      const CACHE_VALIDITY_MS = 1000 * 60 * 5; // 5 minutos de validade no celular do cliente
+      const CACHE_VALIDITY_MS = 1000 * 60 * 5; 
 
       if (typeof window !== "undefined") {
-        const cacheSalvo = sessionStorage.getItem(SESSION_CACHE_KEY); // Usando sessionStorage para limpar ao fechar a aba
+        const cacheSalvo = sessionStorage.getItem(SESSION_CACHE_KEY); 
         if (cacheSalvo) {
           const { data, timestamp } = JSON.parse(cacheSalvo);
           if (Date.now() - timestamp < CACHE_VALIDITY_MS) {
             setTenant(data.tenant);
             setProdutos(data.produtos);
+            setIsAberta(verificarLojaAberta(data.tenant.business_hours));
             setLoading(false);
             return; 
           }
         }
       }
 
-      // 2. BUSCA NO BANCO DE DADOS
-      // Esta requisição será otimizada internamente pelo Next.js App Router (se a Vercel interceptar)
       const { data: tenantData } = await supabase
         .from("tenants")
         .select("*")
@@ -66,6 +106,7 @@ export default function VitrineLoja() {
 
       if (tenantData) {
         setTenant(tenantData);
+        setIsAberta(verificarLojaAberta(tenantData.business_hours));
         
         const { data: produtosData } = await supabase
           .from("products")
@@ -75,7 +116,6 @@ export default function VitrineLoja() {
 
         setProdutos(produtosData || []);
 
-        // 3. SALVA O CACHE RÁPIDO NO CLIENTE
         if (typeof window !== "undefined") {
           sessionStorage.setItem(SESSION_CACHE_KEY, JSON.stringify({
             data: { tenant: tenantData, produtos: produtosData || [] },
@@ -90,13 +130,8 @@ export default function VitrineLoja() {
     }
   };
 
-  // ========================================================
-  // RASTREAMENTO INTELIGENTE: META PIXEL + GOOGLE ANALYTICS
-  // ========================================================
   useEffect(() => {
     if (typeof window !== "undefined") {
-      
-      // 1. INJEÇÃO DO META PIXEL
       if (tenant?.meta_pixel_id) {
         const initMetaPixel = () => {
           // @ts-ignore
@@ -126,11 +161,9 @@ export default function VitrineLoja() {
         window.fbq('track', 'PageView');
       }
 
-      // 2. INJEÇÃO DO GOOGLE ANALYTICS (GA4)
       if (tenant?.ga_measurement_id) {
         const scriptUrl = `https://www.googletagmanager.com/gtag/js?id=${tenant.ga_measurement_id}`;
         
-        // Verifica se o script do GA já não foi injetado antes para evitar duplicação
         if (!document.querySelector(`script[src="${scriptUrl}"]`)) {
           const script = document.createElement('script');
           script.async = true;
@@ -179,7 +212,16 @@ export default function VitrineLoja() {
   );
 
   const destaques = [...produtosFiltrados]
-    .sort((a, b) => (b.total_vendas || 0) - (a.total_vendas || 0))
+    .sort((a, b) => {
+      const vendasA = a.total_vendas || 0;
+      const vendasB = b.total_vendas || 0;
+      
+      if (vendasB !== vendasA) {
+        return vendasB - vendasA;
+      }
+      
+      return Number(b.price) - Number(a.price);
+    })
     .slice(0, 5);
 
   let categoriasUnicas = Array.from(new Set(produtosFiltrados.map(p => p.categories?.name || "Gerais")));
@@ -210,12 +252,24 @@ export default function VitrineLoja() {
                 <span className="font-black text-zinc-400">{tenant.name.charAt(0)}</span>
               )}
             </div>
-            <div className="text-center sm:text-left pt-2 md:pt-6 flex-1">
+            <div className="text-center sm:text-left pt-2 md:pt-6 flex-1 w-full">
               <h1 className="text-2xl md:text-3xl font-bold text-zinc-900">{tenant.name}</h1>
-              <div className="flex items-center justify-center sm:justify-start gap-2 mt-2 text-sm text-zinc-500">
-                <span className="text-amber-500 font-bold">★ 4.9</span>
-                <span>•</span>
-                <span>Lanches e Bebidas</span>
+              
+              {/* TAGS LIMPAS DE HORÁRIO */}
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-2">
+                {isAberta ? (
+                  <span className="bg-emerald-50 text-emerald-600 border border-emerald-100 font-bold text-xs px-2.5 py-1 rounded-md">
+                     Aberto
+                  </span>
+                ) : (
+                  <span className="bg-red-50 text-red-600 border border-red-100 font-bold text-xs px-2.5 py-1 rounded-md">
+                     Fechado
+                  </span>
+                )}
+                <span className="text-zinc-300">•</span>
+                <span className="text-amber-500 font-bold text-sm">★ 4.9</span>
+                <span className="text-zinc-300">•</span>
+                <span className="text-zinc-500 text-sm">Lanches e Bebidas</span>
               </div>
             </div>
           </div>
@@ -232,7 +286,7 @@ export default function VitrineLoja() {
               placeholder="Buscar no cardápio"
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
-              className="w-full pl-12 pr-4 py-4 bg-white border border-zinc-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all shadow-sm text-zinc-800 placeholder:text-zinc-400"
+              className="w-full pl-12 pr-4 py-4 bg-white border border-zinc-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm text-zinc-800 placeholder:text-zinc-400"
             />
           </div>
 
@@ -267,7 +321,7 @@ export default function VitrineLoja() {
                     </div>
                     <h3 className="font-semibold text-zinc-800 leading-tight mb-1">{produto.name}</h3>
                     <p className="text-xs text-zinc-500 line-clamp-2 mb-3 flex-1">{produto.description}</p>
-                    <span className="font-bold text-emerald-600 block">R$ {Number(produto.price).toFixed(2).replace('.', ',')}</span>
+                    <span className="font-bold text-indigo-600 block">R$ {Number(produto.price).toFixed(2).replace('.', ',')}</span>
                   </div>
                 ))}
               </div>
@@ -293,7 +347,7 @@ export default function VitrineLoja() {
                         <div className="flex flex-col flex-1">
                           <h3 className="font-semibold text-zinc-800 mb-1">{produto.name}</h3>
                           <p className="text-sm text-zinc-500 line-clamp-2 mb-3 leading-relaxed">{produto.description}</p>
-                          <span className="font-medium text-emerald-600 mt-auto">R$ {Number(produto.price).toFixed(2).replace('.', ',')}</span>
+                          <span className="font-medium text-indigo-600 mt-auto">R$ {Number(produto.price).toFixed(2).replace('.', ',')}</span>
                         </div>
                         <div className="w-28 h-28 bg-zinc-100 rounded-lg flex items-center justify-center shrink-0 overflow-hidden border border-zinc-100">
                           {produto.image_url ? (
@@ -315,6 +369,7 @@ export default function VitrineLoja() {
           <ModalProduto
             produto={produtoSelecionado}
             tenantId={tenant.id}
+            isAberta={isAberta} // Passando a prop se a loja tá aberta
             onClose={() => setProdutoSelecionado(null)}
           />
         )}
