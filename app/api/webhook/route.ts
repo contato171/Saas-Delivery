@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: Request) {
   // A MÁGICA: Inicializa as chaves apenas quando a requisição acontece
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
-    apiVersion: "2023-10-16",
+    apiVersion: "2026-02-25.clover",
   });
 
   const supabaseAdmin = createClient(
