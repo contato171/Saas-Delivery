@@ -179,7 +179,7 @@ export default function GestaoIntegracoes({ tenantId }: { tenantId: string }) {
     // AQUI ESTÁ O SEGREDO DO LOGIN PARA EMPRESAS
     const configId = "829471859623097"; // Substitua pelo número que a Meta gerou
     
-    window.location.href = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&state=${tenantId}&config_id=${configId}`;
+    window.location.href = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&state=${tenantId}&config_id=${configId}&response_type=code`;
   };
 
   const handleDesconectarFacebook = async () => {
