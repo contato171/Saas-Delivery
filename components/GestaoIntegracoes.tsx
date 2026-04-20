@@ -176,10 +176,10 @@ export default function GestaoIntegracoes({ tenantId }: { tenantId: string }) {
     const appId = process.env.NEXT_PUBLIC_META_APP_ID; 
     const redirectUri = encodeURIComponent(`${window.location.origin}/api/meta/callback`);
     
-    // A SOLUÇÃO MÁGICA: Adicionei os 3 scopes básicos obrigatórios no início!
-    const scope = "public_profile,email,pages_show_list,ads_management,pages_manage_ads,pages_read_engagement,business_management";
+    // AQUI ESTÁ O SEGREDO DO LOGIN PARA EMPRESAS
+    const configId = "829471859623097"; // Substitua pelo número que a Meta gerou
     
-    window.location.href = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&state=${tenantId}&scope=${scope}`;
+    window.location.href = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&state=${tenantId}&config_id=${configId}`;
   };
 
   const handleDesconectarFacebook = async () => {
