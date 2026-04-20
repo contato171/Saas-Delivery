@@ -6,7 +6,20 @@ import { useCart } from "./CartContext";
 import { supabase } from "../lib/supabase";
 import { X, Plus, Minus, ShoppingBag, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 
-export default function ModalProduto({ produto, tenantId, isAberta, onClose }: { produto: any, tenantId: string, isAberta: boolean, onClose: () => void }) {
+// NOVO: Adicionado a propriedade onAddToCart na tipagem
+export default function ModalProduto({ 
+  produto, 
+  tenantId, 
+  isAberta, 
+  onClose,
+  onAddToCart // Recebe a função do page.tsx
+}: { 
+  produto: any, 
+  tenantId: string, 
+  isAberta: boolean, 
+  onClose: () => void,
+  onAddToCart?: (valorProduto: number) => void // Opcional para não quebrar outras telas que não passem essa prop
+}) {
   const cart = useCart();
   const adicionarProduto = cart.adicionarAoCarrinho || cart.adicionarItem || cart.addItem || cart.add;
 
@@ -143,6 +156,16 @@ export default function ModalProduto({ produto, tenantId, isAberta, onClose }: {
 
     if (adicionarProduto) {
       adicionarProduto(produto, quantidadeGlobal, listaFormatadaParaCarrinho, observacao, variacaoSelecionada);
+      
+      // NOVO: Chama a função que registra o rascunho no Supabase (se ela existir)
+      if (onAddToCart) {
+        // Envia o valor atual do carrinho. Como estamos dentro do modal de produto, 
+        // seria melhor passar o valor desse item sendo adicionado, ou o valor total do carrinho.
+        // O ideal é passar o valor desse item, pois o CartContext gerencia o total.
+        // Vamos enviar o valor final deste item para criar o rascunho.
+        onAddToCart(valorFinalTela);
+      }
+      
       onClose();
     }
   };

@@ -11,7 +11,6 @@ import {
   Trophy, Download
 } from "lucide-react";
 
-// Mapa dinâmico
 const MapaCalorReal = dynamic(() => import('./MapaCalor'), { 
   ssr: false, 
   loading: () => <div className="w-full h-80 bg-zinc-100 rounded-xl flex items-center justify-center border border-zinc-200"><span className="animate-pulse text-zinc-500 font-bold flex items-center gap-2"><Map size={20}/> Conectando satélite...</span></div> 
@@ -41,7 +40,6 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
   const [autoCupomDesc, setAutoCupomDesc] = useState(15);
   const [salvandoAuto, setSalvandoAuto] = useState(false);
 
-  // MOTOR DE EXTRAÇÃO CIRÚRGICO DE ENDEREÇOS ATUALIZADO (AGORA PUXA O CEP PARA O CSV)
   const extrairDadosEndereco = (endereco: string) => {
     try {
       let cep = "";
@@ -49,7 +47,7 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
         cep = endereco.split("CEP:")[1].split("|")[0].trim();
       }
       
-      const strLimpa = endereco.split('|')[0]; // Tira CEP e Compl da string principal
+      const strLimpa = endereco.split('|')[0]; 
       const partes = strLimpa.split(',');
       if (partes.length >= 3) {
         const rua = partes[0].trim();
@@ -68,6 +66,7 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
   };
 
   const normalizar = (str: string) => str ? str.trim().toLowerCase() : "";
+  const limparTelefone = (str: string) => str ? str.replace(/\D/g, '') : "";
 
   const carregarDadosInteligentes = async () => {
     setLoading(true);
@@ -122,9 +121,12 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
         });
       });
 
+      // NOVO MOTOR DE CRUZAMENTO: Usa o WhatsApp (Phone) limpo como chave para evitar duplicidade e garantir ranking
       const clientesComRFM = cData.map(cliente => {
+        const phoneClienteLimpo = limparTelefone(cliente.phone);
+        
         const pedidosDoCliente = oData.filter(o => 
-          normalizar(o.customer_name) === normalizar(cliente.name) && 
+          (limparTelefone(o.customer_phone) === phoneClienteLimpo) && 
           o.status !== 'cancelado' && 
           o.status !== 'excluido'
         );
@@ -215,7 +217,6 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
       setMapaCalorDados(bairrosMapeados);
       setSegmentos(stats);
       
-      // O Array principal que alimenta todas as tabelas é ordenado por Gasto Total
       setClientesProcessados(clientesComRFM.sort((a, b) => b.totalGasto - a.totalGasto)); 
     }
     setLoading(false);
@@ -257,17 +258,14 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
     carregarDadosInteligentes();
   };
 
-  // MOTOR DE EXPORTAÇÃO CSV
   const exportarCSV = () => {
-    // Cabeçalho da planilha
     const headers = ["Nome", "E-mail", "Telefone", "Rua", "Bairro", "Cidade", "UF", "CEP", "Num de Pedidos", "Total Gasto (R$)"];
     
     const linhas = clientesProcessados.map(c => {
        const end = extrairDadosEndereco(c.address || "");
-       // Separador Ponto e Vírgula (;) para o Excel em português abrir as colunas certinho
        return [
          `"${c.name || ''}"`,
-         `""`, // Coluna de Email em branco para o lojista preencher depois se quiser
+         `""`, 
          `"${c.phone || ''}"`,
          `"${end.rua || ''}"`,
          `"${end.bairro || ''}"`,
@@ -280,7 +278,6 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
     });
 
     const csvContent = headers.join(";") + "\n" + linhas.join("\n");
-    // O prefixo \uFEFF força o Excel a reconhecer os acentos do português (UTF-8)
     const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -302,7 +299,6 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
         </div>
       </div>
 
-      {/* MENU DE ABAS ATUALIZADO */}
       <div className="flex gap-6 border-b border-zinc-200 overflow-x-auto">
         <button onClick={() => setAbaCrm("rfm")} className={`pb-3 font-semibold text-sm transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap ${abaCrm === "rfm" ? "border-blue-600 text-blue-700" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}><BrainCircuit size={18} /> Inteligência Geográfica</button>
         <button onClick={() => setAbaCrm("clientes")} className={`pb-3 font-semibold text-sm transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap ${abaCrm === "clientes" ? "border-blue-600 text-blue-700" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}><Users size={18} /> Base de Clientes</button>
@@ -413,7 +409,6 @@ export default function GestaoCRM({ tenantId }: { tenantId: string }) {
         </div>
       )}
 
-      {/* NOVA ABA: RANKING E EXPORTAÇÃO CSV */}
       {abaCrm === "ranking" && (
         <div className="bg-white border border-zinc-200 rounded-xl shadow-sm overflow-hidden animate-in fade-in">
           <div className="p-6 border-b border-zinc-200 bg-zinc-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">

@@ -11,15 +11,12 @@ import CheckoutModal from "../../components/CheckoutModal";
 import { CartProvider } from "../../components/CartContext";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
-// Função utilitária para verificar se a loja está aberta AGORA
 function verificarLojaAberta(horarios: any) {
-  if (!horarios) return true; // Se não tem horário configurado, assume aberto
-  
+  if (!horarios) return true; 
   const agora = new Date();
   const diasStr = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"];
   const diaAtual = diasStr[agora.getDay()];
   const configHoje = horarios[diaAtual];
-
   if (!configHoje || !configHoje.ativo) return false;
 
   const horaAtual = agora.getHours();
@@ -32,13 +29,10 @@ function verificarLojaAberta(horarios: any) {
   const [hFecha, mFech] = configHoje.fechamento.split(':').map(Number);
   const timeFecha = hFecha * 60 + mFech;
 
-  // Lógica para horário que vira a noite (ex: abre 18:00, fecha 02:00)
   if (timeFecha < timeAbre) {
     if (timeAtual >= timeAbre || timeAtual <= timeFecha) return true;
     return false;
   }
-
-  // Lógica normal (ex: abre 10:00, fecha 22:00)
   return timeAtual >= timeAbre && timeAtual <= timeFecha;
 }
 
@@ -54,7 +48,6 @@ export default function VitrineLoja() {
   const [produtoSelecionado, setProdutoSelecionado] = useState<any>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  
   const [isAberta, setIsAberta] = useState(true);
 
   const carouselRef = useRef<HTMLDivElement>(null);
@@ -65,17 +58,27 @@ export default function VitrineLoja() {
     }
   }, [slug]);
 
-  // Atualiza o status da loja a cada minuto para não precisar dar F5
   useEffect(() => {
     if (!tenant?.business_hours) return;
-    
     setIsAberta(verificarLojaAberta(tenant.business_hours));
     const timer = setInterval(() => {
       setIsAberta(verificarLojaAberta(tenant.business_hours));
     }, 60000);
-    
     return () => clearInterval(timer);
   }, [tenant]);
+
+  // NOVO: Função silenciosa que grava no banco de dados os eventos do cliente
+  const registrarEventoAnalytics = async (tenantIdToTrack: string, tipoEvento: string, valor: number = 0) => {
+    try {
+      await supabase.from('store_analytics').insert([{ 
+        tenant_id: tenantIdToTrack,
+        event_type: tipoEvento,
+        value: valor
+      }]);
+    } catch (error) {
+      console.error("Erro analytics", error);
+    }
+  };
 
   const carregarLojaOtimizada = async () => {
     setLoading(true);
@@ -83,6 +86,7 @@ export default function VitrineLoja() {
     try {
       const SESSION_CACHE_KEY = `@nexus_menu_${slug}`;
       const CACHE_VALIDITY_MS = 1000 * 60 * 5; 
+      const VISIT_KEY = `@nexus_visit_${slug}`; // Trava para não contar F5 como visita nova
 
       if (typeof window !== "undefined") {
         const cacheSalvo = sessionStorage.getItem(SESSION_CACHE_KEY); 
@@ -93,27 +97,23 @@ export default function VitrineLoja() {
             setProdutos(data.produtos);
             setIsAberta(verificarLojaAberta(data.tenant.business_hours));
             setLoading(false);
+            
+            if (!sessionStorage.getItem(VISIT_KEY)) {
+               registrarEventoAnalytics(data.tenant.id, 'visit');
+               sessionStorage.setItem(VISIT_KEY, "true");
+            }
             return; 
           }
         }
       }
 
-      const { data: tenantData } = await supabase
-        .from("tenants")
-        .select("*")
-        .eq("slug", slug)
-        .single();
+      const { data: tenantData } = await supabase.from("tenants").select("*").eq("slug", slug).single();
 
       if (tenantData) {
         setTenant(tenantData);
         setIsAberta(verificarLojaAberta(tenantData.business_hours));
         
-        const { data: produtosData } = await supabase
-          .from("products")
-          .select("*, categories(name)") 
-          .eq("tenant_id", tenantData.id)
-          .order("name", { ascending: true }); 
-
+        const { data: produtosData } = await supabase.from("products").select("*, categories(name, sort_order)").eq("tenant_id", tenantData.id).order("name", { ascending: true }); 
         setProdutos(produtosData || []);
 
         if (typeof window !== "undefined") {
@@ -121,6 +121,11 @@ export default function VitrineLoja() {
             data: { tenant: tenantData, produtos: produtosData || [] },
             timestamp: Date.now()
           }));
+
+          if (!sessionStorage.getItem(VISIT_KEY)) {
+             registrarEventoAnalytics(tenantData.id, 'visit');
+             sessionStorage.setItem(VISIT_KEY, "true");
+          }
         }
       }
     } catch (error) {
@@ -163,109 +168,69 @@ export default function VitrineLoja() {
 
       if (tenant?.ga_measurement_id) {
         const scriptUrl = `https://www.googletagmanager.com/gtag/js?id=${tenant.ga_measurement_id}`;
-        
         if (!document.querySelector(`script[src="${scriptUrl}"]`)) {
           const script = document.createElement('script');
           script.async = true;
           script.src = scriptUrl;
           document.head.appendChild(script);
-
           // @ts-ignore
           window.dataLayer = window.dataLayer || [];
           // @ts-ignore
           function gtag(){window.dataLayer.push(arguments);}
-          
           // @ts-ignore
           gtag('js', new Date());
           // @ts-ignore
-          gtag('config', tenant.ga_measurement_id, {
-            page_path: window.location.pathname,
-          });
+          gtag('config', tenant.ga_measurement_id, { page_path: window.location.pathname });
         }
       }
     }
   }, [tenant?.meta_pixel_id, tenant?.ga_measurement_id]);
 
-  const scrollEsquerda = () => {
-    if (carouselRef.current) {
-      carouselRef.current.scrollBy({ left: -300, behavior: 'smooth' });
-    }
-  };
+  const scrollEsquerda = () => { if (carouselRef.current) carouselRef.current.scrollBy({ left: -300, behavior: 'smooth' }); };
+  const scrollDireita = () => { if (carouselRef.current) carouselRef.current.scrollBy({ left: 300, behavior: 'smooth' }); };
 
-  const scrollDireita = () => {
-    if (carouselRef.current) {
-      carouselRef.current.scrollBy({ left: 300, behavior: 'smooth' });
-    }
-  };
+  if (loading) return <div className="min-h-screen bg-zinc-50 flex items-center justify-center text-zinc-500 font-medium">Carregando cardápio...</div>;
+  if (!tenant) return <div className="min-h-screen bg-zinc-50 flex items-center justify-center text-zinc-500 font-medium">Restaurante não encontrado.</div>;
 
-  if (loading) {
-    return <div className="min-h-screen bg-zinc-50 flex items-center justify-center text-zinc-500 font-medium">Carregando cardápio...</div>;
-  }
-
-  if (!tenant) {
-    return <div className="min-h-screen bg-zinc-50 flex items-center justify-center text-zinc-500 font-medium">Restaurante não encontrado.</div>;
-  }
-
-  const produtosFiltrados = produtos.filter((p) => 
-    p.name.toLowerCase().includes(busca.toLowerCase()) || 
-    (p.description && p.description.toLowerCase().includes(busca.toLowerCase()))
-  );
+  const produtosFiltrados = produtos.filter((p) => p.name.toLowerCase().includes(busca.toLowerCase()) || (p.description && p.description.toLowerCase().includes(busca.toLowerCase())));
 
   const destaques = [...produtosFiltrados]
     .sort((a, b) => {
       const vendasA = a.total_vendas || 0;
       const vendasB = b.total_vendas || 0;
-      
-      if (vendasB !== vendasA) {
-        return vendasB - vendasA;
-      }
-      
+      if (vendasB !== vendasA) return vendasB - vendasA;
       return Number(b.price) - Number(a.price);
-    })
-    .slice(0, 5);
+    }).slice(0, 5);
+
+  const ordemDasCategorias: Record<string, number> = {};
+  produtosFiltrados.forEach(p => {
+    const nomeCat = p.categories?.name || "Gerais";
+    if (ordemDasCategorias[nomeCat] === undefined) {
+      ordemDasCategorias[nomeCat] = p.categories?.sort_order ?? 999; 
+    }
+  });
 
   let categoriasUnicas = Array.from(new Set(produtosFiltrados.map(p => p.categories?.name || "Gerais")));
-
-  categoriasUnicas.sort((catA, catB) => {
-    const maxPrecoA = Math.max(...produtosFiltrados.filter(p => (p.categories?.name || "Gerais") === catA).map(p => Number(p.price) || 0));
-    const maxPrecoB = Math.max(...produtosFiltrados.filter(p => (p.categories?.name || "Gerais") === catB).map(p => Number(p.price) || 0));
-    return maxPrecoB - maxPrecoA;
-  });
+  categoriasUnicas.sort((catA, catB) => ordemDasCategorias[catA as string] - ordemDasCategorias[catB as string]);
 
   return (
     <CartProvider tenantId={tenant.id}>
       <div className="min-h-screen bg-zinc-50 font-sans pb-20">
         
         <div className="w-full h-40 md:h-64 bg-zinc-200 relative">
-          {tenant.cover_url && (
-            <img src={tenant.cover_url} alt="Capa da Loja" className="w-full h-full object-cover" />
-          )}
+          {tenant.cover_url && <img src={tenant.cover_url} alt="Capa da Loja" className="w-full h-full object-cover" />}
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
         </div>
         
         <div className="max-w-5xl mx-auto px-4 sm:px-6 relative -mt-12 md:-mt-16">
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-zinc-100 flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
             <div className="w-24 h-24 md:w-32 md:h-32 bg-zinc-100 rounded-full border-4 border-white shadow-md flex items-center justify-center text-3xl shrink-0 overflow-hidden">
-              {tenant.logo_url ? (
-                <img src={tenant.logo_url} alt="Logo" className="w-full h-full object-cover" />
-              ) : (
-                <span className="font-black text-zinc-400">{tenant.name.charAt(0)}</span>
-              )}
+              {tenant.logo_url ? <img src={tenant.logo_url} alt="Logo" className="w-full h-full object-cover" /> : <span className="font-black text-zinc-400">{tenant.name.charAt(0)}</span>}
             </div>
             <div className="text-center sm:text-left pt-2 md:pt-6 flex-1 w-full">
               <h1 className="text-2xl md:text-3xl font-bold text-zinc-900">{tenant.name}</h1>
-              
-              {/* TAGS LIMPAS DE HORÁRIO */}
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-2">
-                {isAberta ? (
-                  <span className="bg-emerald-50 text-emerald-600 border border-emerald-100 font-bold text-xs px-2.5 py-1 rounded-md">
-                     Aberto
-                  </span>
-                ) : (
-                  <span className="bg-red-50 text-red-600 border border-red-100 font-bold text-xs px-2.5 py-1 rounded-md">
-                     Fechado
-                  </span>
-                )}
+                {isAberta ? <span className="bg-emerald-50 text-emerald-600 border border-emerald-100 font-bold text-xs px-2.5 py-1 rounded-md">Aberto</span> : <span className="bg-red-50 text-red-600 border border-red-100 font-bold text-xs px-2.5 py-1 rounded-md">Fechado</span>}
                 <span className="text-zinc-300">•</span>
                 <span className="text-amber-500 font-bold text-sm">★ 4.9</span>
                 <span className="text-zinc-300">•</span>
@@ -276,48 +241,26 @@ export default function VitrineLoja() {
         </div>
 
         <div className="max-w-5xl mx-auto px-4 sm:px-6 mt-8">
-          
           <div className="relative mb-10">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-              <span className="text-zinc-400">🔍</span>
-            </div>
-            <input
-              type="text"
-              placeholder="Buscar no cardápio"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              className="w-full pl-12 pr-4 py-4 bg-white border border-zinc-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm text-zinc-800 placeholder:text-zinc-400"
-            />
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><span className="text-zinc-400">🔍</span></div>
+            <input type="text" placeholder="Buscar no cardápio" value={busca} onChange={(e) => setBusca(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-white border border-zinc-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm text-zinc-800 placeholder:text-zinc-400" />
           </div>
 
           {destaques.length > 0 && busca === "" && (
             <div className="mb-12 relative group">
               <div className="flex justify-between items-end mb-4">
                 <h2 className="text-xl font-bold text-zinc-900 tracking-tight">Os Mais Pedidos 🔥</h2>
-                
                 <div className="hidden sm:flex gap-2">
-                  <button onClick={scrollEsquerda} className="p-2 rounded-full border border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-600 transition-colors shadow-sm">
-                    <ChevronLeft size={20}/>
-                  </button>
-                  <button onClick={scrollDireita} className="p-2 rounded-full border border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-600 transition-colors shadow-sm">
-                    <ChevronRight size={20}/>
-                  </button>
+                  <button onClick={scrollEsquerda} className="p-2 rounded-full border border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-600 transition-colors shadow-sm"><ChevronLeft size={20}/></button>
+                  <button onClick={scrollDireita} className="p-2 rounded-full border border-zinc-200 bg-white hover:bg-zinc-100 text-zinc-600 transition-colors shadow-sm"><ChevronRight size={20}/></button>
                 </div>
               </div>
               
               <div ref={carouselRef} className="flex overflow-x-auto gap-4 pb-4 snap-x hide-scrollbar scroll-smooth">
                 {destaques.map((produto) => (
-                  <div 
-                    key={produto.id} 
-                    onClick={() => setProdutoSelecionado(produto)}
-                    className="min-w-[260px] max-w-[260px] sm:min-w-[280px] bg-white border border-zinc-200 rounded-xl p-4 cursor-pointer hover:shadow-md transition-shadow snap-start flex flex-col"
-                  >
+                  <div key={produto.id} onClick={() => setProdutoSelecionado(produto)} className="min-w-[260px] max-w-[260px] sm:min-w-[280px] bg-white border border-zinc-200 rounded-xl p-4 cursor-pointer hover:shadow-md transition-shadow snap-start flex flex-col">
                     <div className="w-full h-36 bg-zinc-100 rounded-lg mb-4 flex items-center justify-center overflow-hidden shrink-0">
-                      {produto.image_url ? (
-                        <img src={produto.image_url} alt={produto.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-4xl opacity-50">🍔</span>
-                      )}
+                      {produto.image_url ? <img src={produto.image_url} alt={produto.name} className="w-full h-full object-cover" /> : <span className="text-4xl opacity-50">🍔</span>}
                     </div>
                     <h3 className="font-semibold text-zinc-800 leading-tight mb-1">{produto.name}</h3>
                     <p className="text-xs text-zinc-500 line-clamp-2 mb-3 flex-1">{produto.description}</p>
@@ -331,7 +274,6 @@ export default function VitrineLoja() {
           <div className="flex flex-col gap-10">
             {categoriasUnicas.map((categoria) => {
               const produtosDaCategoria = produtosFiltrados.filter(p => (p.categories?.name || "Gerais") === categoria);
-              
               if (produtosDaCategoria.length === 0) return null;
 
               return (
@@ -339,22 +281,14 @@ export default function VitrineLoja() {
                   <h2 className="text-xl font-bold text-zinc-900 mb-4 tracking-tight">{categoria as string}</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {produtosDaCategoria.map((produto) => (
-                      <div 
-                        key={produto.id} 
-                        onClick={() => setProdutoSelecionado(produto)}
-                        className="bg-white border border-zinc-200 rounded-xl p-4 cursor-pointer hover:shadow-md hover:border-zinc-300 transition-all flex justify-between gap-4"
-                      >
+                      <div key={produto.id} onClick={() => setProdutoSelecionado(produto)} className="bg-white border border-zinc-200 rounded-xl p-4 cursor-pointer hover:shadow-md hover:border-zinc-300 transition-all flex justify-between gap-4">
                         <div className="flex flex-col flex-1">
                           <h3 className="font-semibold text-zinc-800 mb-1">{produto.name}</h3>
                           <p className="text-sm text-zinc-500 line-clamp-2 mb-3 leading-relaxed">{produto.description}</p>
                           <span className="font-medium text-indigo-600 mt-auto">R$ {Number(produto.price).toFixed(2).replace('.', ',')}</span>
                         </div>
                         <div className="w-28 h-28 bg-zinc-100 rounded-lg flex items-center justify-center shrink-0 overflow-hidden border border-zinc-100">
-                          {produto.image_url ? (
-                            <img src={produto.image_url} alt={produto.name} className="w-full h-full object-cover" />
-                          ) : (
-                            <span className="text-3xl opacity-50">🍔</span>
-                          )}
+                          {produto.image_url ? <img src={produto.image_url} alt={produto.name} className="w-full h-full object-cover" /> : <span className="text-3xl opacity-50">🍔</span>}
                         </div>
                       </div>
                     ))}
@@ -369,8 +303,12 @@ export default function VitrineLoja() {
           <ModalProduto
             produto={produtoSelecionado}
             tenantId={tenant.id}
-            isAberta={isAberta} // Passando a prop se a loja tá aberta
+            isAberta={isAberta}
             onClose={() => setProdutoSelecionado(null)}
+            onAddToCart={(valorProduto: number) => {
+              // NOVO: Adiciona ao carrinho na tabela nova e silenciosa!
+              registrarEventoAnalytics(tenant.id, 'add_to_cart', valorProduto); 
+            }}
           />
         )}
 
@@ -385,14 +323,14 @@ export default function VitrineLoja() {
             onCheckout={() => {
               setIsCartOpen(false);
               setIsCheckoutOpen(true);
+              // NOVO: Registra que o cliente avançou para a tela final!
+              registrarEventoAnalytics(tenant.id, 'checkout_start'); 
             }} 
           />
         )}
 
         {isCheckoutOpen && (
-          <CheckoutModal 
-            onClose={() => setIsCheckoutOpen(false)} 
-          />
+          <CheckoutModal onClose={() => setIsCheckoutOpen(false)} />
         )}
         
         <style dangerouslySetInnerHTML={{__html: `

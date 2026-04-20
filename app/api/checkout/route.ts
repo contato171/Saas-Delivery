@@ -1,110 +1,118 @@
-export const dynamic = 'force-dynamic';
-import { stripe } from "../../../lib/stripe";
 import { NextResponse } from "next/server";
+import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
+  apiVersion: "2023-10-16",
+});
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL as string,
+  process.env.SUPABASE_SERVICE_ROLE_KEY as string
+);
+
+// O ID DA SUA TAXA DE 1,9%
+const PRICE_ID_TAXA_USO = "price_1TM7bJBhOcnQDlI7Qebz8q0l"; 
 
 export async function POST(req: Request) {
   try {
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL as string,
-      process.env.SUPABASE_SERVICE_ROLE_KEY as string
-    );
+    const body = await req.json();
+    const { tenantId, type, amount, priceId, paymentMethod } = body;
 
-    // Recebendo o paymentMethod do frontend
-    const { type, tenantId, priceId, amount, paymentMethod } = await req.json();
+    const { data: tenant } = await supabase.from("tenants").select("*").eq("id", tenantId).single();
+    if (!tenant) return NextResponse.json({ error: "Loja não encontrada." }, { status: 404 });
 
-    if (!tenantId) {
-      return NextResponse.json({ error: "Tenant ID é obrigatório" }, { status: 400 });
-    }
-
-    const baseUrl = process.env.NEXT_PUBLIC_URL || "https://saas-delivery-seven.vercel.app";
-
-    const { data: tenant } = await supabaseAdmin
-      .from("tenants")
-      .select("*")
-      .eq("id", tenantId)
-      .single();
-
-    if (!tenant) {
-      return NextResponse.json({ error: "Lojista não encontrado" }, { status: 404 });
-    }
-
-    let stripeCustomerId = tenant.stripe_customer_id;
-
-    if (!stripeCustomerId) {
+    let customerId = tenant.stripe_customer_id;
+    if (!customerId) {
       const customer = await stripe.customers.create({
-        email: tenant.email,
+        email: tenant.email || "contato@nexusdelivery.com.br",
         name: tenant.name,
-        metadata: { tenantId: tenant.id },
+        metadata: { tenant_id: tenantId }
       });
-      stripeCustomerId = customer.id;
-
-      await supabaseAdmin
-        .from("tenants")
-        .update({ stripe_customer_id: stripeCustomerId })
-        .eq("id", tenantId);
+      customerId = customer.id;
+      await supabase.from("tenants").update({ stripe_customer_id: customerId }).eq("id", tenantId);
     }
 
-    let sessionConfig: any = {
-      customer: stripeCustomerId,
-      success_url: `${baseUrl}/painel?sucesso=true`,
-      cancel_url: `${baseUrl}/painel?cancelado=true`,
-      client_reference_id: tenantId,
-    };
+    // Mapeamento dinâmico do método de pagamento
+    let paymentMethodTypes = ["card"];
+    let paymentMethodOptions = {};
+    let billingAddressCollection: "auto" | "required" = "auto";
 
-    if (type === "subscription") {
-      if (!priceId) return NextResponse.json({ error: "Price ID ausente para assinatura" }, { status: 400 });
+    if (paymentMethod === "pix") {
+      paymentMethodTypes = ["pix"];
+    } else if (paymentMethod === "boleto") {
+      paymentMethodTypes = ["boleto"];
+      paymentMethodOptions = { boleto: { expires_after_days: 3 } };
+      billingAddressCollection = "required"; 
+    }
+
+    // =========================================================
+    // TIPO 1: PAGAMENTO DA FATURA MANUAL (Taxas Acumuladas)
+    // =========================================================
+    if (type === "invoice" || type === "topup") {
+      const amountInCents = Math.round(amount * 100);
+      if (amountInCents < 200) return NextResponse.json({ error: "O valor mínimo de pagamento exigido pela Stripe é R$ 2,00." }, { status: 400 });
       
-      sessionConfig = {
-        ...sessionConfig,
-        mode: "subscription",
-        payment_method_types: ["card"],
-        line_items: [{ price: priceId, quantity: 1 }],
-        metadata: { type: "subscription", tenantId: tenantId },
-      };
-    } 
-    else if (type === "topup") {
-      if (!amount) return NextResponse.json({ error: "Valor ausente para recarga" }, { status: 400 });
-
-      // Lógica separada: É Pix ou Cartão?
-      const isPix = paymentMethod === "pix";
-
-      sessionConfig = {
-        ...sessionConfig,
-        mode: "payment",
-        payment_method_types: isPix ? ["pix"] : ["card"], 
-        line_items: [
-          {
-            price_data: {
-              currency: "brl",
-              product_data: {
-                name: "Recarga de Carteira (Taxas)",
-                description: "Saldo pré-pago para processamento de pedidos.",
+      try {
+        const session = await stripe.checkout.sessions.create({
+          customer: customerId,
+          payment_method_types: paymentMethodTypes as any,
+          ...(paymentMethod === "boleto" && { payment_method_options: paymentMethodOptions }),
+          billing_address_collection: billingAddressCollection as any,
+          line_items: [
+            {
+              price_data: {
+                currency: "brl",
+                product_data: {
+                  name: `Fatura Nexus Delivery - ${tenant.name}`,
+                  description: "Acerto das taxas de transação da plataforma.",
+                },
+                unit_amount: amountInCents,
               },
-              unit_amount: Math.round(amount * 100), 
+              quantity: 1,
             },
-            quantity: 1,
-          },
-        ],
-        metadata: { type: "topup", tenantId: tenantId, amount: amount.toString() },
-      };
-
-      // Só pede para salvar cobrança futura (off_session) SE FOR CARTÃO
-      if (!isPix) {
-        sessionConfig.payment_intent_data = {
-          setup_future_usage: "off_session", 
-        };
+          ],
+          mode: "payment",
+          success_url: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://nexusdeliveryapp.com.br'}/painel?aba=financeiro&sucesso=true`,
+          cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://nexusdeliveryapp.com.br'}/painel?aba=financeiro&cancelado=true`,
+        });
+        return NextResponse.json({ url: session.url });
+      } catch (stripeErr: any) {
+        if (stripeErr.message.includes("payment_method_types")) {
+            return NextResponse.json({ error: "O PIX ou Boleto ainda não estão ativados no seu painel da Stripe. Ative-os em Configurações > Métodos de Pagamento na Stripe." }, { status: 500 });
+        }
+        throw stripeErr;
       }
-
-    } else {
-      return NextResponse.json({ error: "Tipo de cobrança inválido" }, { status: 400 });
     }
 
-    const session = await stripe.checkout.sessions.create(sessionConfig);
+    // =========================================================
+    // TIPO 2: ASSINATURA DO PLANO (Mensal/Anual + Taxa 1,9%)
+    // =========================================================
+    if (type === "subscription") {
+      if (!priceId) return NextResponse.json({ error: "ID do plano não informado." }, { status: 400 });
 
-    return NextResponse.json({ url: session.url });
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        payment_method_types: paymentMethodTypes as any,
+        ...(paymentMethod === "boleto" && { payment_method_options: paymentMethodOptions }),
+        billing_address_collection: billingAddressCollection as any,
+        line_items: [
+          { price: priceId, quantity: 1 }, // O valor do plano fixo (R$497 ou Anual)
+          { price: PRICE_ID_TAXA_USO }     // O Medidor de 1,9%
+        ],
+        mode: "subscription",
+        // REMOVIDO O TRIAL AQUI PARA PERMITIR PIX E BOLETO
+        success_url: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://nexusdeliveryapp.com.br'}/painel?aba=financeiro&sucesso=true`,
+        cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://nexusdeliveryapp.com.br'}/painel?aba=financeiro&cancelado=true`,
+      });
+
+      return NextResponse.json({ url: session.url });
+    }
+
+    return NextResponse.json({ error: `Tipo de cobrança não reconhecido: ${type}` }, { status: 400 });
+
   } catch (error: any) {
-    console.error("Erro no Stripe Checkout:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Erro Geral na API:", error);
+    return NextResponse.json({ error: "Falha ao processar pagamento. " + error.message }, { status: 500 });
   }
 }

@@ -6,26 +6,29 @@ import { supabase } from "../lib/supabase";
 import { 
   KanbanSquare, History, CheckCircle2, XCircle, Trash2, 
   ChefHat, Bike, Clock, MapPin, CreditCard, RefreshCw, AlertTriangle,
-  VolumeX, BellRing, Edit, Save, X
+  VolumeX, BellRing, Edit, Save, X, Send, Loader2
 } from "lucide-react";
 
 export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
   const [pedidos, setPedidos] = useState<any[]>([]);
+  const [motoboys, setMotoboys] = useState<any[]>([]); 
   const [loading, setLoading] = useState(true);
   const [abaAtiva, setAbaAtiva] = useState<"kanban" | "historico">("kanban");
   const [atualizando, setAtualizando] = useState(false);
 
-  // Estados de Edição
   const [pedidoEditando, setPedidoEditando] = useState<any>(null);
   const [salvandoEdicao, setSalvandoEdicao] = useState(false);
 
-  // Estados do Motor de Alarme
+  const [pedidoDespache, setPedidoDespache] = useState<any>(null);
+  const [motoboySelecionado, setMotoboySelecionado] = useState("");
+  const [despachando, setDespachando] = useState(false);
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [somBloqueado, setSomBloqueado] = useState(false);
+  const [ultimoPedidoId, setUltimoPedidoId] = useState<string | null>(null);
 
   useEffect(() => {
-    audioRef.current = new Audio("/toque.mp3");
-    if (audioRef.current) audioRef.current.loop = true;
+    audioRef.current = new Audio("/toque-suave.mp3"); 
     return () => {
       if (audioRef.current) {
         audioRef.current.pause();
@@ -36,13 +39,36 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
 
   const carregarPedidos = async () => {
     setAtualizando(true);
+    
+    const { data: motoboysData } = await supabase
+      .from("motoboys")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .eq("status", "ativo");
+    if (motoboysData) setMotoboys(motoboysData);
+
     const { data } = await supabase
       .from("orders")
       .select("*, order_items(*)")
       .eq("tenant_id", tenantId)
+      .not('status', 'in', '("carrinho","checkout","abandonado")')
       .order("created_at", { ascending: false });
 
-    if (data) setPedidos(data);
+    if (data) {
+      setPedidos(data);
+      const pendentesNaBusca = data.filter(p => p.status === "pendente" || p.status === "novo");
+      if (pendentesNaBusca.length > 0) {
+        const idMaisRecente = pendentesNaBusca[0].id;
+        if (ultimoPedidoId !== idMaisRecente) {
+           setUltimoPedidoId(idMaisRecente);
+           if (audioRef.current) {
+             audioRef.current.currentTime = 0;
+             audioRef.current.play().catch(() => setSomBloqueado(true));
+           }
+        }
+      }
+    }
+    
     setLoading(false);
     setAtualizando(false);
   };
@@ -53,28 +79,18 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
     return () => clearInterval(intervalo);
   }, [tenantId]);
 
-  const pendentes = pedidos.filter(p => p.status === "pendente");
+  const pendentes = pedidos.filter(p => p.status === "pendente" || p.status === "novo");
   const preparando = pedidos.filter(p => p.status === "preparando");
   const prontos = pedidos.filter(p => p.status === "pronto");
-  const historico = pedidos.filter(p => ["concluido", "cancelado", "excluido"].includes(p.status));
-
-  // MOTOR DO ALARME
-  useEffect(() => {
-    if (!audioRef.current) return;
-    if (pendentes.length > 0) {
-      audioRef.current.play().catch(() => setSomBloqueado(true));
-    } else {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-      setSomBloqueado(false);
-    }
-  }, [pendentes.length]);
+  // NOVA COLUNA: Em Trânsito
+  const emTransito = pedidos.filter(p => p.status === "em_transito");
+  
+  const historico = pedidos.filter(p => ["concluido", "cancelado", "excluido", "pago", "entregue"].includes(p.status));
 
   const habilitarSomManual = () => {
     if (audioRef.current) {
       audioRef.current.play().then(() => {
         setSomBloqueado(false);
-        if (pendentes.length === 0) audioRef.current?.pause();
       }).catch(err => console.error("Ainda bloqueado", err));
     }
   };
@@ -82,6 +98,55 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
   const alterarStatus = async (id: string, novoStatus: string) => {
     setPedidos(pedidos.map(p => p.id === id ? { ...p, status: novoStatus } : p));
     await supabase.from("orders").update({ status: novoStatus }).eq("id", id);
+  };
+
+  const confirmarDespacho = async () => {
+    if (!motoboySelecionado) return alert("Por favor, selecione um entregador.");
+    setDespachando(true);
+
+    try {
+      const horaDespacho = new Date().toISOString();
+      const { error } = await supabase
+        .from("orders")
+        .update({ 
+          status: "em_transito", 
+          motoboy: motoboySelecionado,
+          dispatched_at: horaDespacho
+        })
+        .eq("id", pedidoDespache.id);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setPedidos(pedidos.map(p => p.id === pedidoDespache.id ? { 
+        ...p, 
+        status: "em_transito", 
+        motoboy: motoboySelecionado,
+        dispatched_at: horaDespacho
+      } : p));
+      
+      setPedidoDespache(null);
+      setMotoboySelecionado("");
+    } catch (e: any) {
+      alert(`Erro ao despachar: ${e.message}. (Verifique se a coluna 'dispatched_at' existe na tabela orders).`);
+      console.error(e);
+    } finally {
+      setDespachando(false);
+    }
+  };
+
+  // =========================================================================
+  // NOVA FUNÇÃO: MARCAR COMO ENTREGUE (Registra a hora exata da entrega pro Radar)
+  // =========================================================================
+  const marcarComoEntregue = async (id: string) => {
+    const horaEntrega = new Date().toISOString();
+    
+    // Atualiza a tela primeiro pra dar sensação de rapidez
+    setPedidos(pedidos.map(p => p.id === id ? { ...p, status: "entregue", delivered_at: horaEntrega } : p));
+    
+    // Salva no banco com o carimbo de tempo
+    await supabase.from("orders").update({ status: "entregue", delivered_at: horaEntrega }).eq("id", id);
   };
 
   const acaoRecusar = async (pedido: any) => {
@@ -96,21 +161,17 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
     }
   };
 
-  // 1. EXCLUSÃO DEFINITIVA DO BANCO DE DADOS
   const acaoExcluirDefinitivo = async (id: string) => {
     if (window.confirm("ATENÇÃO: Deseja EXCLUIR DEFINITIVAMENTE este pedido? Ele desaparecerá do banco de dados.")) {
       try {
-        // Primeiro deletamos os itens para evitar conflito de chaves
         const { error: errItens } = await supabase.from("order_items").delete().eq("order_id", id);
-        if (errItens) throw new Error("Erro ao excluir itens do pedido no Supabase.");
+        if (errItens) throw new Error("Erro ao excluir itens do pedido.");
 
-        // Depois deletamos o pedido em si
         const { error: errOrder } = await supabase.from("orders").delete().eq("id", id);
-        if (errOrder) throw new Error("Erro ao excluir o pedido no Supabase. Verifique as permissões (RLS).");
+        if (errOrder) throw new Error("Erro ao excluir o pedido. Verifique as permissões (RLS).");
 
-        // Removemos da tela na hora
         setPedidos(pedidos.filter(p => p.id !== id));
-        alert("Pedido excluído com sucesso do banco de dados!");
+        alert("Pedido excluído com sucesso!");
       } catch (error: any) {
         alert(error.message);
         console.error(error);
@@ -118,7 +179,6 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
     }
   };
 
-  // 2. SALVAR EDIÇÃO DO PEDIDO
   const salvarEdicao = async () => {
     if (!pedidoEditando) return;
     setSalvandoEdicao(true);
@@ -133,11 +193,8 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
         })
         .eq("id", pedidoEditando.id);
         
-      if (error) {
-        throw new Error("O Supabase bloqueou a edição (Policy RLS). Você precisa liberar o UPDATE na tabela 'orders'.");
-      }
+      if (error) throw new Error("O Supabase bloqueou a edição (Policy RLS).");
       
-      // Atualiza a tela imediatamente
       setPedidos(pedidos.map(p => p.id === pedidoEditando.id ? pedidoEditando : p));
       setPedidoEditando(null);
       alert("Pedido atualizado com sucesso!");
@@ -166,7 +223,6 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
         </div>
         <div className="flex flex-col items-end gap-2">
           <p className="font-black text-blue-600">R$ {Number(pedido.total_amount).toFixed(2).replace(".", ",")}</p>
-          {/* BOTÃO DE EDITAR NO CARD DO KANBAN */}
           <button onClick={() => setPedidoEditando({ ...pedido })} className="text-xs font-bold text-zinc-500 hover:text-blue-600 transition-colors flex items-center gap-1 bg-zinc-100 px-2 py-1 rounded">
             <Edit size={12} /> Editar
           </button>
@@ -194,6 +250,10 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
         <div className="text-xs text-zinc-600 space-y-1.5 pt-1">
           <p className="flex items-start gap-1.5 leading-tight"><MapPin size={14} className="mt-0.5 text-zinc-400 shrink-0"/> {pedido.customer_address}</p>
           <p className="flex items-center gap-1.5"><CreditCard size={14} className="text-zinc-400 shrink-0"/> {pedido.payment_method}</p>
+          {/* Adicionado o Motoboy no card se estiver em trânsito */}
+          {coluna === "em_transito" && pedido.motoboy && (
+             <p className="flex items-center gap-1.5 font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded w-max mt-2"><Bike size={14}/> {pedido.motoboy}</p>
+          )}
         </div>
       </div>
 
@@ -207,7 +267,6 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
               <button onClick={() => acaoRecusar(pedido)} className="flex-1 border border-red-200 text-red-600 hover:bg-red-50 font-bold py-2 rounded-lg text-xs flex justify-center items-center gap-1 transition-colors">
                 <XCircle size={14}/> Recusar
               </button>
-              {/* LIXEIRA VERMELHA DO KANBAN */}
               <button onClick={() => acaoExcluirDefinitivo(pedido.id)} className="flex-1 border border-red-200 text-red-500 hover:bg-red-600 hover:text-white font-bold py-2 rounded-lg text-xs flex justify-center items-center gap-1 transition-colors">
                 <Trash2 size={14}/> Excluir
               </button>
@@ -222,8 +281,15 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
         )}
 
         {coluna === "pronto" && (
-          <button onClick={() => alterarStatus(pedido.id, "concluido")} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg flex justify-center items-center gap-2 transition-colors shadow-sm">
-            <Bike size={18}/> Despachar (Concluir)
+          <button onClick={() => setPedidoDespache(pedido)} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg flex justify-center items-center gap-2 transition-colors shadow-sm">
+            <Send size={18}/> Despachar
+          </button>
+        )}
+
+        {/* NOVO BOTÃO DA QUARTA COLUNA */}
+        {coluna === "em_transito" && (
+          <button onClick={() => marcarComoEntregue(pedido.id)} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg flex justify-center items-center gap-2 transition-colors shadow-sm">
+            <CheckCircle2 size={18}/> Marcar como Entregue
           </button>
         )}
       </div>
@@ -271,6 +337,55 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
         </div>
       )}
 
+      {/* MODAL DE DESPACHO */}
+      {pedidoDespache && (
+        <div className="fixed inset-0 z-[500] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden animate-in zoom-in-95">
+            <div className="p-6 border-b border-zinc-100 flex justify-between items-center bg-zinc-50">
+              <h2 className="font-black text-xl text-zinc-900 flex items-center gap-2"><Send size={24} className="text-emerald-600"/> Despachar</h2>
+              <button onClick={() => {setPedidoDespache(null); setMotoboySelecionado("");}} className="text-zinc-400 hover:text-zinc-800"><X size={24}/></button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="bg-zinc-100 p-3 rounded-xl border border-zinc-200 text-center">
+                <p className="text-xs text-zinc-500 font-bold uppercase mb-1">Cliente</p>
+                <p className="font-black text-zinc-900">{pedidoDespache.customer_name}</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-zinc-500 uppercase mb-2">Quem vai entregar?</label>
+                {motoboys.length === 0 ? (
+                  <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm p-3 rounded-xl font-medium">
+                    Nenhum entregador ativo encontrado. Cadastre-os no menu "Entregador Parceiro".
+                  </div>
+                ) : (
+                  <select 
+                    value={motoboySelecionado} 
+                    onChange={(e) => setMotoboySelecionado(e.target.value)}
+                    className="w-full border border-zinc-300 rounded-xl p-3 text-sm focus:ring-2 focus:ring-emerald-600 outline-none bg-white font-bold text-zinc-800"
+                  >
+                    <option value="" disabled>Selecione um motoboy...</option>
+                    {motoboys.map(m => (
+                      <option key={m.id} value={m.name}>{m.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div className="pt-4">
+                <button 
+                  onClick={confirmarDespacho}
+                  disabled={despachando || !motoboySelecionado}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
+                >
+                  {despachando ? <Loader2 size={20} className="animate-spin"/> : "Confirmar e Enviar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Cozinha / Despache</h1>
@@ -297,45 +412,60 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
           <KanbanSquare size={18} /> Linha de Produção Ao Vivo
         </button>
         <button onClick={() => setAbaAtiva("historico")} className={`pb-3 font-semibold text-sm transition-colors border-b-2 flex items-center gap-2 ${abaAtiva === "historico" ? "border-blue-600 text-blue-700" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}>
-          <History size={18} /> Histórico & Cancelados
+          <History size={18} /> Histórico de Pedidos
         </button>
       </div>
 
       {loading ? (
         <div className="flex-1 flex items-center justify-center text-zinc-500 font-medium"><RefreshCw size={24} className="animate-spin mr-2"/> Carregando motor da cozinha...</div>
       ) : abaAtiva === "kanban" ? (
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 overflow-hidden items-start">
+        // ATUALIZAÇÃO DA TELA DO KANBAN: 4 COLUNAS AO INVÉS DE 3
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 overflow-hidden items-start">
           
+          {/* Coluna 1: Novos */}
           <div className="bg-zinc-100/50 rounded-2xl border border-zinc-200 p-4 flex flex-col h-full max-h-[75vh]">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-bold text-zinc-900 flex items-center gap-2">
-                {pendentes.length > 0 ? <BellRing size={18} className="text-red-500 animate-bounce"/> : <AlertTriangle size={18} className="text-zinc-400"/>}
+              <h2 className="font-bold text-zinc-900 flex items-center gap-2 text-sm">
+                {pendentes.length > 0 ? <BellRing size={16} className="text-red-500 animate-bounce"/> : <AlertTriangle size={16} className="text-zinc-400"/>}
                 Novos Pedidos
               </h2>
-              <span className={`font-black text-xs px-2.5 py-1 rounded-full ${pendentes.length > 0 ? 'bg-red-100 text-red-700' : 'bg-zinc-200 text-zinc-600'}`}>{pendentes.length}</span>
+              <span className={`font-black text-[10px] px-2 py-0.5 rounded-full ${pendentes.length > 0 ? 'bg-red-100 text-red-700' : 'bg-zinc-200 text-zinc-600'}`}>{pendentes.length}</span>
             </div>
             <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
-              {pendentes.length === 0 ? <p className="text-sm text-zinc-400 text-center py-10 font-medium border-2 border-dashed border-zinc-200 rounded-xl mx-2">Nenhum pedido na fila.</p> : pendentes.map(p => <CardPedido key={p.id} pedido={p} coluna="pendente" />)}
+              {pendentes.length === 0 ? <p className="text-xs text-zinc-400 text-center py-10 font-medium border-2 border-dashed border-zinc-200 rounded-xl mx-2">Nenhum pedido na fila.</p> : pendentes.map(p => <CardPedido key={p.id} pedido={p} coluna="pendente" />)}
             </div>
           </div>
 
+          {/* Coluna 2: Preparando */}
           <div className="bg-zinc-100/50 rounded-2xl border border-zinc-200 p-4 flex flex-col h-full max-h-[75vh]">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-bold text-zinc-900 flex items-center gap-2"><ChefHat size={18} className="text-orange-500"/> Preparando</h2>
-              <span className="bg-orange-100 text-orange-700 font-black text-xs px-2.5 py-1 rounded-full">{preparando.length}</span>
+              <h2 className="font-bold text-zinc-900 flex items-center gap-2 text-sm"><ChefHat size={16} className="text-orange-500"/> Preparando</h2>
+              <span className="bg-orange-100 text-orange-700 font-black text-[10px] px-2 py-0.5 rounded-full">{preparando.length}</span>
             </div>
             <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
-              {preparando.length === 0 ? <p className="text-sm text-zinc-400 text-center py-10 font-medium border-2 border-dashed border-zinc-200 rounded-xl mx-2">Cozinha livre.</p> : preparando.map(p => <CardPedido key={p.id} pedido={p} coluna="preparando" />)}
+              {preparando.length === 0 ? <p className="text-xs text-zinc-400 text-center py-10 font-medium border-2 border-dashed border-zinc-200 rounded-xl mx-2">Cozinha livre.</p> : preparando.map(p => <CardPedido key={p.id} pedido={p} coluna="preparando" />)}
             </div>
           </div>
 
+          {/* Coluna 3: Prontos (Aguardando Despacho) */}
           <div className="bg-zinc-100/50 rounded-2xl border border-zinc-200 p-4 flex flex-col h-full max-h-[75vh]">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-bold text-zinc-900 flex items-center gap-2"><Bike size={18} className="text-emerald-500"/> Prontos p/ Despache</h2>
-              <span className="bg-emerald-100 text-emerald-700 font-black text-xs px-2.5 py-1 rounded-full">{prontos.length}</span>
+              <h2 className="font-bold text-zinc-900 flex items-center gap-2 text-sm"><Bike size={16} className="text-emerald-500"/> Prontos p/ Envio</h2>
+              <span className="bg-emerald-100 text-emerald-700 font-black text-[10px] px-2 py-0.5 rounded-full">{prontos.length}</span>
             </div>
             <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
-              {prontos.length === 0 ? <p className="text-sm text-zinc-400 text-center py-10 font-medium border-2 border-dashed border-zinc-200 rounded-xl mx-2">Aguardando pacotes.</p> : prontos.map(p => <CardPedido key={p.id} pedido={p} coluna="pronto" />)}
+              {prontos.length === 0 ? <p className="text-xs text-zinc-400 text-center py-10 font-medium border-2 border-dashed border-zinc-200 rounded-xl mx-2">Aguardando pacotes.</p> : prontos.map(p => <CardPedido key={p.id} pedido={p} coluna="pronto" />)}
+            </div>
+          </div>
+
+          {/* Coluna 4: NOVA - Em Rota / Para Entregar */}
+          <div className="bg-blue-50/50 rounded-2xl border border-blue-100 p-4 flex flex-col h-full max-h-[75vh]">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-bold text-blue-900 flex items-center gap-2 text-sm"><MapPin size={16} className="text-blue-500"/> Em Rota / Entregar</h2>
+              <span className="bg-blue-200 text-blue-800 font-black text-[10px] px-2 py-0.5 rounded-full">{emTransito.length}</span>
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
+              {emTransito.length === 0 ? <p className="text-xs text-blue-400 text-center py-10 font-medium border-2 border-dashed border-blue-200 rounded-xl mx-2">Nenhum pedido em rota.</p> : emTransito.map(p => <CardPedido key={p.id} pedido={p} coluna="em_transito" />)}
             </div>
           </div>
 
@@ -349,7 +479,7 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
                   <th className="p-4 font-semibold">ID / Hora</th>
                   <th className="p-4 font-semibold">Cliente</th>
                   <th className="p-4 font-semibold">Valor</th>
-                  <th className="p-4 font-semibold">Status Final</th>
+                  <th className="p-4 font-semibold">Status / Entregador</th>
                   <th className="p-4 font-semibold text-right">Ações</th>
                 </tr>
               </thead>
@@ -366,16 +496,19 @@ export default function PedidosAoVivo({ tenantId }: { tenantId: string }) {
                       <td className="p-4 font-medium text-zinc-800">{pedido.customer_name}</td>
                       <td className="p-4 font-bold text-zinc-900">R$ {Number(pedido.total_amount).toFixed(2).replace(".", ",")}</td>
                       <td className="p-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-bold border ${
-                          pedido.status === "concluido" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
-                          pedido.status === "cancelado" ? "bg-red-50 text-red-700 border-red-200" :
-                          "bg-zinc-100 text-zinc-500 border-zinc-200"
-                        }`}>
-                          {pedido.status === "concluido" ? "Entregue" : pedido.status === "cancelado" ? "Recusado" : "Excluído"}
-                        </span>
+                        <div className="flex flex-col items-start gap-1">
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-bold border uppercase tracking-wider ${
+                            pedido.status === "em_transito" ? "bg-amber-50 text-amber-700 border-amber-200" :
+                            pedido.status === "concluido" || pedido.status === "entregue" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                            pedido.status === "cancelado" ? "bg-red-50 text-red-700 border-red-200" :
+                            "bg-zinc-100 text-zinc-500 border-zinc-200"
+                          }`}>
+                            {pedido.status === "em_transito" ? "Em Rota" : pedido.status === "concluido" || pedido.status === "entregue" || pedido.status === "pago" ? "Entregue" : pedido.status === "cancelado" ? "Recusado" : "Excluído"}
+                          </span>
+                          {pedido.motoboy && <span className="text-[10px] font-bold text-zinc-500 ml-1">🏍️ {pedido.motoboy}</span>}
+                        </div>
                       </td>
                       <td className="p-4 text-right flex justify-end gap-2">
-                         {/* BOTOES NO HISTÓRICO */}
                          <button onClick={() => setPedidoEditando({ ...pedido })} className="p-2 text-blue-600 hover:bg-blue-50 bg-white border border-blue-200 rounded-lg shadow-sm transition-colors" title="Editar Pedido">
                             <Edit size={16} />
                          </button>

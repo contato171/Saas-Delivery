@@ -6,44 +6,40 @@ import { supabase } from "../lib/supabase";
 import { 
   Plus, Edit3, Trash2, Image as ImageIcon, 
   Loader2, CheckCircle2, X, UploadCloud, LayoutList, Package, Layers,
-  FileSpreadsheet, Download, Search, ChevronDown, ChevronUp
+  FileSpreadsheet, Download, Search, ChevronDown, ChevronUp, GripVertical, Zap, Ticket, ToggleLeft, ToggleRight
 } from "lucide-react";
 
 export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
-  const [activeTab, setActiveTab] = useState<"categorias" | "produtos" | "complementos">("produtos");
+  const [activeTab, setActiveTab] = useState<"categorias" | "produtos" | "complementos" | "cupons">("produtos");
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
 
-  // Listas de Dados
   const [categorias, setCategorias] = useState<any[]>([]);
   const [produtos, setProdutos] = useState<any[]>([]);
   const [complementos, setComplementos] = useState<any[]>([]);
+  const [cupons, setCupons] = useState<any[]>([]);
 
-  // Estados de Modais
   const [modalOpen, setModalOpen] = useState(false);
   const [itemEditando, setItemEditando] = useState<any>(null);
 
-  // Estados de Formulário
   const [formData, setFormData] = useState<any>({});
   const [imagemFile, setImagemFile] = useState<File | null>(null);
   const [imagemPreview, setImagemPreview] = useState<string | null>(null);
   
   const [produtosSelecionadosComp, setProdutosSelecionadosComp] = useState<string[]>([]);
   
-  // Controle de Variações Simples (Para Produtos)
   const [novaVariacao, setNovaVariacao] = useState("");
 
-  // ESTADOS NOVOS: Controle de Itens do Grupo de Complementos (Para Sabores de Pizza, etc)
   const [listaItensComp, setListaItensComp] = useState<any[]>([]);
   const [novoNomeItemComp, setNovoNomeItemComp] = useState("");
   const [novoPrecoItemComp, setNovoPrecoItemComp] = useState("");
 
-  // ESTADOS DE IMPORTAÇÃO CSV E BUSCA
+  const [novoUpsellId, setNovoUpsellId] = useState("");
+
   const [importando, setImportando] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [buscaProduto, setBuscaProduto] = useState("");
   
-  // Controle de Categorias Abertas/Fechadas
   const [categoriasAbertas, setCategoriasAbertas] = useState<Record<string, boolean>>(() => {
     if (typeof window !== "undefined") {
       const salvo = localStorage.getItem(`@saas_categorias_abertas_${tenantId}`);
@@ -52,21 +48,44 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
     return {};
   });
 
+  const dragItem = useRef<number | null>(null);
+  const dragOverItem = useRef<number | null>(null);
+
+  const handleSort = async () => {
+    if (dragItem.current === null || dragOverItem.current === null) return;
+    
+    let _categorias = [...categorias];
+    const draggedItemContent = _categorias.splice(dragItem.current, 1)[0];
+    _categorias.splice(dragOverItem.current, 0, draggedItemContent);
+    
+    dragItem.current = null;
+    dragOverItem.current = null;
+    setCategorias(_categorias); 
+
+    const atualizacoes = _categorias.map((cat, i) => {
+      return supabase.from("categories").update({ sort_order: i }).eq("id", cat.id);
+    });
+    await Promise.all(atualizacoes);
+  };
+
   useEffect(() => {
     carregarDados(true);
   }, [tenantId]);
 
   async function carregarDados(showLoader = false) {
     if (showLoader) setLoading(true);
-    const [catRes, prodRes, compRes] = await Promise.all([
-      supabase.from("categories").select("*").eq("tenant_id", tenantId).order("name"),
+    const [catRes, prodRes, compRes, cupomRes] = await Promise.all([
+      supabase.from("categories").select("*").eq("tenant_id", tenantId).order("sort_order", { ascending: true }),
       supabase.from("products").select("*, categories(name)").eq("tenant_id", tenantId).order("name"),
-      supabase.from("complement_groups").select("*, complement_items(*), products(name)").eq("tenant_id", tenantId).order("name")
+      supabase.from("complement_groups").select("*, complement_items(*), products(name)").eq("tenant_id", tenantId).order("name"),
+      supabase.from("coupons").select("*").eq("tenant_id", tenantId).order("created_at", { ascending: false })
     ]);
 
     if (catRes.data) setCategorias(catRes.data);
     if (prodRes.data) setProdutos(prodRes.data);
     if (compRes.data) setComplementos(compRes.data);
+    if (cupomRes.data) setCupons(cupomRes.data);
+    
     if (showLoader) setLoading(false);
   }
 
@@ -76,18 +95,22 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
     setNovaVariacao(""); 
     setNovoNomeItemComp("");
     setNovoPrecoItemComp("");
+    setNovoUpsellId("");
 
     if (item) {
-      setFormData({ ...item, variations: item.variations || [], tipo_calculo: item.tipo_calculo || 'soma' });
+      setFormData({ ...item });
       setImagemPreview(item.image_url || null);
       
       if (tipo === "complementos") {
         setProdutosSelecionadosComp(item.product_id ? [item.product_id] : []);
-        // Carrega os itens (sabores) que já estavam salvos no banco para este grupo
         setListaItensComp(item.complement_items || []);
       }
     } else {
-      setFormData({ variations: [], tipo_calculo: 'soma' });
+      if (tipo === "cupons") setFormData({ active: true, desconto: 10, first_purchase_only: false });
+      else if (tipo === "produtos") setFormData({ variations: [], upsell_item_ids: [] });
+      else if (tipo === "complementos") setFormData({ tipo_calculo: 'soma' });
+      else setFormData({});
+      
       setImagemPreview(null);
       setProdutosSelecionadosComp([]);
       setListaItensComp([]);
@@ -106,6 +129,7 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
     setListaItensComp([]);
     setNovoNomeItemComp("");
     setNovoPrecoItemComp("");
+    setNovoUpsellId("");
   };
 
   const handleFotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -154,7 +178,6 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
     });
   };
 
-  // Funções de Variações (Produto Simples)
   const addVariacao = () => {
     if (novaVariacao.trim() === "") return;
     const currentVars = formData.variations || [];
@@ -169,11 +192,10 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
     setFormData({ ...formData, variations: currentVars.filter((_, idx) => idx !== indexToRemove) });
   };
 
-  // === FUNÇÕES NOVAS DE ITENS DE COMPLEMENTO (A MÁGICA DA TELA DO LOJISTA) ===
   const adicionarItemComp = () => {
     if (!novoNomeItemComp.trim()) return;
     setListaItensComp([...listaItensComp, {
-      id: `temp_${Date.now()}`, // ID temporário só para a tela
+      id: `temp_${Date.now()}`, 
       name: novoNomeItemComp,
       price: parseFloat(novoPrecoItemComp.replace(',', '.')) || 0,
     }]);
@@ -184,44 +206,95 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
   const removerItemComp = (index: number) => {
     setListaItensComp(listaItensComp.filter((_, i) => i !== index));
   };
-  // ===========================================================================
+
+  const toggleCupomAtivo = async (id: string, statusAtual: boolean) => {
+    try {
+      await supabase.from("coupons").update({ active: !statusAtual }).eq("id", id);
+      carregarDados(false);
+    } catch (e) {
+      alert("Erro ao alterar o status do cupom.");
+    }
+  };
 
   const salvarItem = async () => {
     setSalvando(true);
     try {
-      let imageUrl = formData.image_url;
-
-      if (imagemFile) {
-        imageUrl = await uploadFoto();
-      }
-
-      const payload: any = {
-        ...formData,
-        tenant_id: tenantId,
-      };
-
-      if (activeTab !== "categorias") {
-        payload.image_url = imageUrl;
-      } else {
-        delete payload.image_url;
-      }
-
-      delete payload.categories; 
-      delete payload.products;
-      delete payload.product_id;
-      delete payload.complement_items; 
-
       let table = "";
-      if (activeTab === "categorias") table = "categories";
-      if (activeTab === "produtos") table = "products";
-      if (activeTab === "complementos") table = "complement_groups";
+      let payload: any = {};
 
-      if (activeTab === "complementos") {
+      if (activeTab === "cupons") {
+        if (!formData.code || formData.code.trim() === "") {
+          alert("O código do cupom não pode estar vazio.");
+          setSalvando(false);
+          return;
+        }
+        table = "coupons";
+        payload = {
+          tenant_id: tenantId,
+          code: formData.code.trim().toUpperCase(),
+          desconto: formData.desconto || 0,
+          active: formData.active !== undefined ? formData.active : true,
+          first_purchase_only: formData.first_purchase_only || false // NOVO: Salva a trava no banco
+        };
+      } 
+      else if (activeTab === "categorias") {
+        if (!formData.name || formData.name.trim() === "") {
+          alert("O nome da categoria não pode estar vazio.");
+          setSalvando(false);
+          return;
+        }
+        table = "categories";
+        payload = {
+          tenant_id: tenantId,
+          name: formData.name,
+          sort_order: itemEditando ? formData.sort_order : categorias.length
+        };
+      } 
+      else if (activeTab === "produtos") {
+        if (!formData.name || formData.name.trim() === "") {
+          alert("O nome do produto não pode estar vazio.");
+          setSalvando(false);
+          return;
+        }
+        table = "products";
+        let imageUrl = formData.image_url;
+        if (imagemFile) {
+          imageUrl = await uploadFoto();
+        }
+        payload = {
+          tenant_id: tenantId,
+          name: formData.name,
+          description: formData.description,
+          price: formData.price || 0,
+          category_id: formData.category_id,
+          image_url: imageUrl,
+          variations: formData.variations || [],
+          upsell_item_ids: formData.upsell_item_ids || []
+        };
+      } 
+      else if (activeTab === "complementos") {
+        if (!formData.name || formData.name.trim() === "") {
+          alert("O nome do complemento não pode estar vazio.");
+          setSalvando(false);
+          return;
+        }
+        table = "complement_groups";
         if (produtosSelecionadosComp.length === 0) {
           alert("Selecione ao menos um produto para vincular este complemento.");
-          setSalvando(false); return;
+          setSalvando(false); 
+          return;
         }
+        payload = {
+          tenant_id: tenantId,
+          name: formData.name,
+          min_items: formData.min_items || 0,
+          max_items: formData.max_items || 1,
+          is_required: formData.is_required || false,
+          tipo_calculo: formData.tipo_calculo || 'soma'
+        };
+      }
 
+      if (activeTab === "complementos") {
         let groupIdsParaSalvarItens: string[] = [];
 
         if (itemEditando) {
@@ -243,12 +316,9 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
           groupIdsParaSalvarItens.push(...novosGrupos.map(g => g.id));
         }
 
-        // === SALVAR OS SABORES/ITENS DE FORMA AUTOMÁTICA NO BANCO ===
         if (groupIdsParaSalvarItens.length > 0) {
-          // 1. Limpa os itens antigos desse grupo para evitar duplicação ou itens fantasmas
           await supabase.from('complement_items').delete().in('complement_group_id', groupIdsParaSalvarItens);
           
-          // 2. Insere a lista atualizada
           if (listaItensComp.length > 0) {
             const itensParaBanco: any[] = [];
             groupIdsParaSalvarItens.forEach(gid => {
@@ -265,7 +335,6 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
             if (errItems) throw errItems;
           }
         }
-
       } else {
         if (itemEditando) {
           const { error } = await supabase.from(table).update(payload).eq("id", itemEditando.id);
@@ -280,7 +349,7 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
       fecharModal();
     } catch (error: any) {
       console.error(error);
-      alert("Erro ao salvar: " + error.message);
+      alert("Erro do banco de dados: " + (error.message || JSON.stringify(error)));
     } finally {
       setSalvando(false);
     }
@@ -326,6 +395,7 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
         });
 
         const produtosParaInserir = [];
+        let ordensCatAtuais = categorias.length;
 
         for (const linha of linhas) {
           const colunas = linha.split(';').map(col => col.trim().replace(/^"|"$/g, ''));
@@ -344,12 +414,14 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
           if (!category_id) {
             const { data: novaCat, error: errCat } = await supabase.from('categories').insert([{
               tenant_id: tenantId,
-              name: nomeCategoria 
+              name: nomeCategoria,
+              sort_order: ordensCatAtuais
             }]).select().single();
 
             if (!errCat && novaCat) {
               category_id = novaCat.id;
               novasCategorias[catNormalizada] = novaCat.id;
+              ordensCatAtuais++;
             }
           }
 
@@ -396,6 +468,12 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
     return acc;
   }, {} as Record<string, any[]>);
 
+  const chavesAgrupadasOrdenadas = Object.keys(produtosAgrupados).sort((a, b) => {
+    const catA = categorias.find(c => c.name === a);
+    const catB = categorias.find(c => c.name === b);
+    return (catA?.sort_order || 0) - (catB?.sort_order || 0);
+  });
+
   if (loading) return <div className="py-20 flex justify-center text-indigo-600"><Loader2 className="animate-spin" size={32} /></div>;
 
   return (
@@ -404,7 +482,7 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black tracking-tight">Gestão de Cardápio</h1>
-          <p className="text-zinc-500 mt-1 text-sm">Organize categorias, produtos e complementos.</p>
+          <p className="text-zinc-500 mt-1 text-sm">Organize categorias, produtos, complementos e cupons.</p>
         </div>
         
         <div className="flex flex-wrap gap-2">
@@ -427,7 +505,7 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
           )}
 
           <button onClick={() => abrirModal(activeTab)} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-5 rounded-xl shadow-md transition-all flex items-center gap-2">
-            <Plus size={18}/> Novo {activeTab === "categorias" ? "Categoria" : activeTab === "produtos" ? "Produto" : "Grupo de Complemento"}
+            <Plus size={18}/> Novo {activeTab === "categorias" ? "Categoria" : activeTab === "produtos" ? "Produto" : activeTab === "complementos" ? "Complemento" : "Cupom"}
           </button>
         </div>
       </div>
@@ -436,14 +514,27 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
         <button onClick={() => setActiveTab("categorias")} className={`px-4 py-3 font-bold text-sm flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${activeTab === "categorias" ? "border-indigo-600 text-indigo-600" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}><LayoutList size={18}/> Categorias</button>
         <button onClick={() => setActiveTab("produtos")} className={`px-4 py-3 font-bold text-sm flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${activeTab === "produtos" ? "border-indigo-600 text-indigo-600" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}><Package size={18}/> Produtos</button>
         <button onClick={() => setActiveTab("complementos")} className={`px-4 py-3 font-bold text-sm flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${activeTab === "complementos" ? "border-indigo-600 text-indigo-600" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}><Layers size={18}/> Complementos</button>
+        <button onClick={() => setActiveTab("cupons")} className={`px-4 py-3 font-bold text-sm flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${activeTab === "cupons" ? "border-indigo-600 text-indigo-600" : "border-transparent text-zinc-500 hover:text-zinc-800"}`}><Ticket size={18}/> Cupons</button>
       </div>
 
+      {/* ABA CATEGORIAS */}
       {activeTab === "categorias" && (
         <div className="bg-white rounded-2xl border border-zinc-200 shadow-sm overflow-hidden">
-          <div className="divide-y divide-zinc-100">
-            {categorias.length === 0 ? <p className="p-6 text-center text-zinc-500">Nenhuma categoria cadastrada.</p> : categorias.map(cat => (
-              <div key={cat.id} className="p-4 flex items-center justify-between hover:bg-zinc-50 transition-colors">
-                <p className="font-bold text-zinc-900">{cat.name}</p>
+          <div className="flex flex-col">
+            {categorias.length === 0 ? <p className="p-6 text-center text-zinc-500">Nenhuma categoria cadastrada.</p> : categorias.map((cat, index) => (
+              <div 
+                key={cat.id} 
+                draggable
+                onDragStart={(e) => (dragItem.current = index)}
+                onDragEnter={(e) => (dragOverItem.current = index)}
+                onDragEnd={handleSort}
+                onDragOver={(e) => e.preventDefault()}
+                className="p-4 flex items-center justify-between hover:bg-zinc-50 transition-colors group cursor-grab active:cursor-grabbing border-b border-zinc-100 last:border-0"
+              >
+                <div className="flex items-center gap-4">
+                  <GripVertical size={20} className="text-zinc-300 group-hover:text-indigo-500 transition-colors" />
+                  <p className="font-bold text-zinc-900 select-none">{cat.name}</p>
+                </div>
                 <div className="flex gap-2">
                   <button onClick={() => abrirModal("categorias", cat)} className="p-2 text-zinc-400 hover:text-blue-600 bg-white rounded-lg border border-zinc-200 shadow-sm"><Edit3 size={16}/></button>
                   <button onClick={() => excluirItem(cat.id, "categories")} className="p-2 text-zinc-400 hover:text-red-600 bg-white rounded-lg border border-zinc-200 shadow-sm"><Trash2 size={16}/></button>
@@ -454,6 +545,7 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
         </div>
       )}
 
+      {/* ABA PRODUTOS */}
       {activeTab === "produtos" && (
         <div className="space-y-6">
           <div className="relative max-w-md">
@@ -467,10 +559,10 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
             />
           </div>
 
-          {Object.keys(produtosAgrupados).length === 0 ? (
+          {chavesAgrupadasOrdenadas.length === 0 ? (
             <p className="col-span-full py-10 text-center text-zinc-500 border-2 border-dashed border-zinc-200 rounded-2xl">Nenhum produto encontrado.</p>
           ) : (
-            Object.keys(produtosAgrupados).sort().map(categoria => {
+            chavesAgrupadasOrdenadas.map(categoria => {
               const estaAberta = categoriasAbertas[categoria]; 
               
               return (
@@ -492,11 +584,17 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
                       {produtosAgrupados[categoria].map(prod => (
                         <div key={prod.id} className="flex flex-col sm:flex-row sm:items-center p-4 hover:bg-zinc-50 transition-colors gap-4">
                           <div className="flex items-center flex-1 gap-4">
-                            <div className="w-16 h-16 bg-zinc-100 rounded-xl overflow-hidden shrink-0 border border-zinc-200">
+                            <div className="w-16 h-16 bg-zinc-100 rounded-xl overflow-hidden shrink-0 border border-zinc-200 relative">
                               {prod.image_url ? (
                                 <img src={prod.image_url} className="w-full h-full object-cover" alt={prod.name}/>
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center text-zinc-300"><ImageIcon size={24}/></div>
+                              )}
+                              
+                              {prod.upsell_item_ids && prod.upsell_item_ids.length > 0 && (
+                                <div className="absolute -top-1 -right-1 w-5 h-5 bg-orange-500 text-white rounded-full flex items-center justify-center shadow-sm" title="Este produto tem Upsells">
+                                  <Zap size={10} className="fill-white"/>
+                                </div>
                               )}
                             </div>
                             <div className="flex-1">
@@ -533,6 +631,7 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
         </div>
       )}
 
+      {/* ABA COMPLEMENTOS */}
       {activeTab === "complementos" && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {complementos.length === 0 ? <p className="col-span-full py-10 text-center text-zinc-500 border-2 border-dashed border-zinc-200 rounded-2xl">Nenhum complemento cadastrado.</p> : complementos.map(comp => (
@@ -556,16 +655,62 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
         </div>
       )}
 
+      {/* ABA CUPONS COM A TAG DE 1ª COMPRA */}
+      {activeTab === "cupons" && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {cupons.length === 0 ? <p className="col-span-full py-10 text-center text-zinc-500 border-2 border-dashed border-zinc-200 rounded-2xl">Nenhum cupom cadastrado.</p> : cupons.map(cupom => (
+            <div key={cupom.id} className={`bg-white rounded-2xl border ${cupom.active ? 'border-emerald-200 shadow-sm' : 'border-zinc-200 opacity-70'} p-5 flex flex-col gap-4 transition-all relative overflow-hidden`}>
+              
+              {cupom.first_purchase_only && (
+                <div className="absolute top-0 right-0 bg-blue-600 text-white text-[9px] font-black px-3 py-1 rounded-bl-lg tracking-wider">
+                  1ª COMPRA
+                </div>
+              )}
+
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-[10px] font-black text-zinc-400 uppercase tracking-wider mb-1">Código do Cupom</p>
+                  <h3 className="font-black text-2xl text-zinc-900 tracking-tight">{cupom.code}</h3>
+                </div>
+                <div className={`px-3 py-1 mt-1 rounded-lg font-black text-sm ${cupom.active ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-500'}`}>
+                  {cupom.desconto}% OFF
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-between border-t border-zinc-100 pt-4 mt-2">
+                <button 
+                  onClick={() => toggleCupomAtivo(cupom.id, cupom.active)}
+                  className={`flex items-center gap-1.5 text-sm font-bold transition-colors ${cupom.active ? 'text-emerald-600 hover:text-emerald-700' : 'text-zinc-500 hover:text-zinc-700'}`}
+                >
+                  {cupom.active ? <ToggleRight size={24}/> : <ToggleLeft size={24}/>}
+                  {cupom.active ? "Ativo na Loja" : "Inativo"}
+                </button>
+                
+                <div className="flex gap-2">
+                  <button onClick={() => abrirModal("cupons", cupom)} className="p-2 text-zinc-400 hover:text-blue-600 bg-zinc-50 rounded-lg transition-colors"><Edit3 size={16}/></button>
+                  <button onClick={() => excluirItem(cupom.id, "coupons")} className="p-2 text-zinc-400 hover:text-red-600 bg-zinc-50 rounded-lg transition-colors"><Trash2 size={16}/></button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* MODAL GERAL (Categorias, Produtos, Complementos, Cupons) */}
       {modalOpen && (
         <div className="fixed inset-0 bg-zinc-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]">
             <div className="p-5 border-b border-zinc-100 flex items-center justify-between shrink-0 bg-white">
-              <h2 className="font-black text-zinc-900">{itemEditando ? "Editar" : "Novo"} {activeTab === "categorias" ? "Categoria" : activeTab === "produtos" ? "Produto" : "Grupo de Complemento"}</h2>
+              <h2 className="font-black text-zinc-900">
+                {itemEditando ? "Editar" : "Novo"} {activeTab === "categorias" ? "Categoria" : activeTab === "produtos" ? "Produto" : activeTab === "complementos" ? "Complemento" : "Cupom de Desconto"}
+              </h2>
               <button onClick={fecharModal} className="text-zinc-400 hover:text-zinc-700"><X size={20}/></button>
             </div>
             
             <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar">
-              {activeTab !== "categorias" && activeTab !== "complementos" && (
+              
+              {/* UPLOAD FOTO (Apenas Produtos) */}
+              {activeTab === "produtos" && (
                 <div>
                   <label className="block text-xs font-bold text-zinc-500 uppercase mb-2">Foto do Item</label>
                   <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-zinc-300 border-dashed rounded-xl cursor-pointer bg-zinc-50 hover:bg-zinc-100 transition-colors relative overflow-hidden">
@@ -582,13 +727,59 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
                 </div>
               )}
 
-              <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">
-                  {activeTab === "complementos" ? "Nome do Grupo" : "Nome"}
-                </label>
-                <input type="text" value={formData.name || ""} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full border border-zinc-300 rounded-lg p-3 text-sm font-bold text-zinc-900 outline-none focus:ring-2 focus:ring-indigo-600" placeholder={activeTab === "complementos" ? "Ex: Escolha os sabores, Adicionais..." : "Ex: Hambúrguer Clássico"} />
-              </div>
+              {/* NOME GERAL */}
+              {activeTab !== "cupons" && (
+                <div>
+                  <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">
+                    {activeTab === "complementos" ? "Nome do Grupo" : "Nome"}
+                  </label>
+                  <input type="text" value={formData.name || ""} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full border border-zinc-300 rounded-lg p-3 text-sm font-bold text-zinc-900 outline-none focus:ring-2 focus:ring-indigo-600" placeholder={activeTab === "complementos" ? "Ex: Escolha os sabores, Adicionais..." : "Ex: Hambúrguer Clássico"} />
+                </div>
+              )}
 
+              {/* CAMPOS CUPONS */}
+              {activeTab === "cupons" && (
+                <>
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Código Promocional</label>
+                    <input 
+                      type="text" 
+                      value={formData.code || ""} 
+                      onChange={e => setFormData({...formData, code: e.target.value.toUpperCase().replace(/\s/g, '')})} 
+                      className="w-full border border-zinc-300 rounded-lg p-3 text-lg font-black text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-600 uppercase" 
+                      placeholder="Ex: BEMVINDO10" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Porcentagem de Desconto (%)</label>
+                    <input 
+                      type="number" 
+                      min="1" max="100"
+                      value={formData.desconto || ""} 
+                      onChange={e => setFormData({...formData, desconto: parseFloat(e.target.value)})} 
+                      className="w-full border border-zinc-300 rounded-lg p-3 text-sm font-bold text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-600" 
+                      placeholder="Ex: 15" 
+                    />
+                  </div>
+
+                  {/* NOVO: CHECKBOX DE PRIMEIRA COMPRA */}
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-start gap-3 mt-4">
+                    <input 
+                      type="checkbox" 
+                      id="first_purchase_check"
+                      checked={formData.first_purchase_only || false}
+                      onChange={e => setFormData({...formData, first_purchase_only: e.target.checked})}
+                      className="mt-1 w-5 h-5 rounded border-blue-300 text-blue-600 focus:ring-blue-600 cursor-pointer shrink-0" 
+                    />
+                    <div>
+                      <label htmlFor="first_purchase_check" className="font-bold text-blue-800 cursor-pointer flex items-center gap-1.5">Válido apenas para a 1ª Compra?</label>
+                      <p className="text-xs text-blue-700/80 mt-0.5 leading-snug">Se marcado, o sistema bloqueará clientes que já têm pedidos cadastrados no número de WhatsApp de usarem este cupom.</p>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* CAMPOS COMPLEMENTOS */}
               {activeTab === "complementos" && (
                 <div>
                   <label className="block text-xs font-bold text-zinc-500 uppercase mb-1 mt-2">Como cobrar esse grupo?</label>
@@ -600,59 +791,57 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
                 </div>
               )}
 
+              {/* CAMPOS PRODUTOS */}
               {activeTab === "produtos" && (
-                <div>
-                  <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Descrição</label>
-                  <textarea rows={2} value={formData.description || ""} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full border border-zinc-300 rounded-lg p-3 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-indigo-600 resize-none" placeholder="Ingredientes e detalhes..." />
-                </div>
-              )}
-
-              {activeTab === "produtos" && (
-                <div>
-                  <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Categoria</label>
-                  <select value={formData.category_id || ""} onChange={e => setFormData({...formData, category_id: e.target.value})} className="w-full border border-zinc-300 rounded-lg p-3 text-sm font-bold text-zinc-900 outline-none focus:ring-2 focus:ring-indigo-600">
-                    <option value="">Selecione uma categoria...</option>
-                    {categorias.map(cat => (
-                      <option key={cat.id} value={cat.id}>{cat.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {activeTab === "produtos" && (
-                <div className="border-t border-zinc-100 pt-4 mt-2">
-                  <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Variações / Sabores (Opcional)</label>
-                  <p className="text-xs text-zinc-400 mb-3">Ex: Carne, Frango, P. Se adicionado, o cliente terá que escolher um.</p>
-                  
-                  <div className="flex gap-2 mb-3">
-                    <input 
-                      type="text" 
-                      value={novaVariacao} 
-                      onChange={e => setNovaVariacao(e.target.value)} 
-                      onKeyDown={e => e.key === 'Enter' && addVariacao()}
-                      className="flex-1 border border-zinc-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-600" 
-                      placeholder="Digite um sabor..." 
-                    />
-                    <button type="button" onClick={addVariacao} className="bg-zinc-800 hover:bg-zinc-900 text-white px-3 py-2 rounded-lg transition-colors">
-                      <Plus size={18}/>
-                    </button>
+                <>
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Descrição</label>
+                    <textarea rows={2} value={formData.description || ""} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full border border-zinc-300 rounded-lg p-3 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-indigo-600 resize-none" placeholder="Ingredientes e detalhes..." />
                   </div>
-
-                  {formData.variations && formData.variations.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {formData.variations.map((varItem: string, idx: number) => (
-                        <span key={idx} className="bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold py-1.5 px-3 rounded-full flex items-center gap-2">
-                          {varItem}
-                          <button type="button" onClick={() => removeVariacao(idx)} className="text-indigo-400 hover:text-red-500 transition-colors">
-                            <X size={14}/>
-                          </button>
-                        </span>
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Categoria</label>
+                    <select value={formData.category_id || ""} onChange={e => setFormData({...formData, category_id: e.target.value})} className="w-full border border-zinc-300 rounded-lg p-3 text-sm font-bold text-zinc-900 outline-none focus:ring-2 focus:ring-indigo-600">
+                      <option value="">Selecione uma categoria...</option>
+                      {categorias.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
                       ))}
+                    </select>
+                  </div>
+                  <div className="border-t border-zinc-100 pt-4 mt-2">
+                    <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Variações / Sabores (Opcional)</label>
+                    <p className="text-xs text-zinc-400 mb-3">Ex: Carne, Frango, P. Se adicionado, o cliente terá que escolher um.</p>
+                    
+                    <div className="flex gap-2 mb-3">
+                      <input 
+                        type="text" 
+                        value={novaVariacao} 
+                        onChange={e => setNovaVariacao(e.target.value)} 
+                        onKeyDown={e => e.key === 'Enter' && addVariacao()}
+                        className="flex-1 border border-zinc-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-600" 
+                        placeholder="Digite um sabor..." 
+                      />
+                      <button type="button" onClick={addVariacao} className="bg-zinc-800 hover:bg-zinc-900 text-white px-3 py-2 rounded-lg transition-colors">
+                        <Plus size={18}/>
+                      </button>
                     </div>
-                  )}
-                </div>
+
+                    {formData.variations && formData.variations.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {formData.variations.map((varItem: string, idx: number) => (
+                          <span key={idx} className="bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold py-1.5 px-3 rounded-full flex items-center gap-2">
+                            {varItem}
+                            <button type="button" onClick={() => removeVariacao(idx)} className="text-indigo-400 hover:text-red-500 transition-colors">
+                              <X size={14}/>
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
 
+              {/* LISTA E VÍNCULO COMPLEMENTOS */}
               {activeTab === "complementos" && (
                 <div className="space-y-4 pt-2">
                   <div className="grid grid-cols-2 gap-4">
@@ -698,7 +887,6 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
                     </div>
                   </div>
                   
-                  {/* === A MÁGICA: INTERFACE PARA O LOJISTA ADICIONAR OS SABORES/PREÇOS === */}
                   <div className="border-t border-zinc-100 pt-4 mt-4">
                     <label className="block text-xs font-bold text-zinc-500 uppercase mb-2">Opções / Sabores deste Grupo</label>
                     
@@ -745,22 +933,86 @@ export default function GestaoCardapio({ tenantId }: { tenantId: string }) {
                       </p>
                     )}
                   </div>
-                  {/* ====================================================================== */}
 
                 </div>
               )}
 
+              {/* SELETOR DE PREÇO E UPSELL PRODUTOS */}
               {activeTab === "produtos" && (
-                <div className="border-t border-zinc-100 pt-4">
-                  <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Preço Base (R$)</label>
-                  <input type="number" step="0.01" value={formData.price || ""} onChange={e => setFormData({...formData, price: e.target.value})} className="w-full border border-zinc-300 rounded-lg p-3 text-sm font-bold text-zinc-900 outline-none focus:ring-2 focus:ring-indigo-600" placeholder="0.00" />
+                <div className="border-t border-zinc-100 pt-4 space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">Preço Base (R$)</label>
+                    <input type="number" step="0.01" value={formData.price || ""} onChange={e => setFormData({...formData, price: e.target.value})} className="w-full border border-zinc-300 rounded-lg p-3 text-sm font-bold text-zinc-900 outline-none focus:ring-2 focus:ring-indigo-600" placeholder="0.00" />
+                  </div>
+                  
+                  <div className="border-t border-zinc-100 pt-4 mt-4">
+                    <label className="block text-xs font-bold text-zinc-500 uppercase mb-1">
+                      <Zap size={14} className="inline mr-1 text-orange-500 fill-orange-500" />
+                      Compre Junto / Upsell (Opcional)
+                    </label>
+                    <p className="text-xs text-zinc-400 mb-3">Selecione quais produtos sugerir quando o cliente comprar este item.</p>
+
+                    <div className="flex gap-2 mb-3">
+                      <select
+                        value={novoUpsellId}
+                        onChange={e => setNovoUpsellId(e.target.value)}
+                        className="flex-1 border border-zinc-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-600 bg-white"
+                      >
+                        <option value="">Selecione um produto...</option>
+                        {produtos
+                          .filter(p => p.id !== formData.id && !(formData.upsell_item_ids || []).includes(p.id))
+                          .map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))
+                        }
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!novoUpsellId) return;
+                          const atuais = formData.upsell_item_ids || [];
+                          setFormData({ ...formData, upsell_item_ids: [...atuais, novoUpsellId] });
+                          setNovoUpsellId("");
+                        }}
+                        className="bg-zinc-800 hover:bg-zinc-900 text-white px-3 py-2 rounded-lg transition-colors"
+                      >
+                        <Plus size={18} />
+                      </button>
+                    </div>
+
+                    {(formData.upsell_item_ids && formData.upsell_item_ids.length > 0) && (
+                      <div className="flex flex-col gap-2 mt-2">
+                        {formData.upsell_item_ids.map((uId: string) => {
+                          const prodRef = produtos.find(p => p.id === uId);
+                          if (!prodRef) return null;
+                          return (
+                            <div key={uId} className="flex items-center justify-between bg-orange-50/50 border border-orange-100 p-2 rounded-lg">
+                              <span className="text-sm font-bold text-orange-800">{prodRef.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFormData({
+                                    ...formData,
+                                    upsell_item_ids: formData.upsell_item_ids.filter((id: string) => id !== uId)
+                                  });
+                                }}
+                                className="text-orange-400 hover:text-red-500 transition-colors"
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
 
             <div className="p-5 border-t border-zinc-100 bg-zinc-50 flex justify-end gap-3 shrink-0">
               <button onClick={fecharModal} className="px-5 py-2.5 rounded-xl font-bold text-zinc-600 hover:bg-zinc-200 transition-colors">Cancelar</button>
-              <button onClick={salvarItem} disabled={salvando} className="px-5 py-2.5 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors flex items-center gap-2 disabled:opacity-70">
+              <button onClick={salvarItem} disabled={salvando} className={`px-5 py-2.5 rounded-xl font-bold text-white transition-colors flex items-center gap-2 disabled:opacity-70 ${activeTab === 'cupons' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
                 {salvando ? <Loader2 size={18} className="animate-spin"/> : <CheckCircle2 size={18}/>} Salvar
               </button>
             </div>
