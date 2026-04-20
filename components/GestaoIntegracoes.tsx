@@ -18,7 +18,7 @@ export default function GestaoIntegracoes({ tenantId }: { tenantId: string }) {
 
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [conectandoAuth, setConectandoAuth] = useState(false);
-  const [desconectando, setDesconectando] = useState(false); // NOVO
+  const [desconectando, setDesconectando] = useState(false); 
   
   const [businessesMeta, setBusinessesMeta] = useState<any[]>([]); 
   const [paginasMeta, setPaginasMeta] = useState<any[]>([]);
@@ -168,18 +168,20 @@ export default function GestaoIntegracoes({ tenantId }: { tenantId: string }) {
     }
   };
 
+  // ==============================================================================
+  // FUNÇÃO CORRIGIDA: INCLUSÃO DOS SCOPES OBRIGATÓRIOS (public_profile e email)
+  // ==============================================================================
   const handleConectarFacebook = () => {
     setConectandoAuth(true);
     const appId = process.env.NEXT_PUBLIC_META_APP_ID; 
     const redirectUri = encodeURIComponent(`${window.location.origin}/api/meta/callback`);
-    const scope = "ads_management,pages_manage_ads,pages_read_engagement,business_management";
+    
+    // A SOLUÇÃO MÁGICA: Adicionei os 3 scopes básicos obrigatórios no início!
+    const scope = "public_profile,email,pages_show_list,ads_management,pages_manage_ads,pages_read_engagement,business_management";
     
     window.location.href = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&state=${tenantId}&scope=${scope}`;
   };
 
-  // ==============================================================================
-  // NOVA FUNÇÃO: Desconectar (Resetar) Integração com o Facebook
-  // ==============================================================================
   const handleDesconectarFacebook = async () => {
     const confirmar = window.confirm(
       "Atenção: Você tem certeza que deseja desconectar o Facebook?\n\nIsso irá pausar a coleta de dados de Pixel e a gestão de anúncios da sua loja. Você precisará logar novamente para reativar."
@@ -189,20 +191,17 @@ export default function GestaoIntegracoes({ tenantId }: { tenantId: string }) {
 
     setDesconectando(true);
     try {
-      // 1. Limpa os tokens da tabela de integrações
       await supabase.from("tenant_integrations").update({ 
         facebook_access_token: null,
         facebook_user_id: null
       }).eq("tenant_id", tenantId);
 
-      // 2. Limpa os IDs da loja
       await supabase.from("tenants").update({
         meta_page_id: null,
         meta_ad_account_id: null,
         meta_pixel_id: null
       }).eq("id", tenantId);
 
-      // 3. Reseta os estados locais da tela
       setAccessToken(null);
       setPaginaSelecionada("");
       setContaSelecionada("");
